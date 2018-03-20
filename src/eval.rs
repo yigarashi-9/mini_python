@@ -47,6 +47,15 @@ pub enum CtrlOp {
     Continue,
 }
 
+fn normal_result() -> Result<(), CtrlOp> { Ok(()) }
+
+fn is_true_value(res: &Value) -> bool {
+    match res {
+        &Value::IntVal(i) => i != 0,
+        &Value::BoolVal(b) => b,
+    }
+}
+
 pub trait Executable {
     fn exec(&self, env: &mut Env) -> Result<(), CtrlOp>;
 }
@@ -57,7 +66,7 @@ impl Executable for SimpleStmt {
             &SimpleStmt::AssignStmt(ref id, ref expr) => {
                 let v = expr.eval(env);
                 env.insert(id.clone(), v);
-                Ok(())
+                normal_result()
             },
             &SimpleStmt::BreakStmt => return Err(CtrlOp::Break),
             &SimpleStmt::ContinueStmt => return Err(CtrlOp::Continue),
@@ -69,39 +78,20 @@ impl Executable for CompoundStmt {
     fn exec(&self, env: &mut Env) -> Result<(), CtrlOp> {
         match self {
             &CompoundStmt::IfStmt(ref expr, ref prog_then, ref prog_else) => {
-                let cond = expr.eval(env);
-                match cond {
-                    Value::BoolVal(b) => (if b { prog_then } else { prog_else }).exec(env),
-                    _ => panic!("Type error"),
+                if is_true_value(&expr.eval(env)) {
+                    prog_then.exec(env)
+                } else {
+                    prog_else.exec(env)
                 }
             },
             &CompoundStmt::WhileStmt(ref expr, ref prog) => {
-                let mut res = Ok(());
-                loop {
-                    let cond = expr.eval(env);
-                    match cond {
-                        Value::BoolVal(b) => {
-                            if !b {
-                                break
-                            } else {
-                                res = prog.exec(env);
-                                match res {
-                                    Err(CtrlOp::Break) => {
-                                        res = Ok(());
-                                        break
-                                    },
-                                    Err(CtrlOp::Continue) => {
-                                        res = Ok(());
-                                        continue
-                                    },
-                                    _ => continue,
-                                }
-                            }
-                        }
-                        _ => panic!("Type error"),
+                while is_true_value(&expr.eval(env)) {
+                    match prog.exec(env) {
+                        Err(CtrlOp::Break) => break,
+                        _ => continue,
                     }
                 };
-                res
+                normal_result()
             }
         }
     }
@@ -121,6 +111,6 @@ impl Executable for Program {
         for stmt in self {
             try!(stmt.exec(env))
         };
-        Ok(())
+        normal_result()
     }
 }

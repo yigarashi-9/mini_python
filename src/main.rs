@@ -14,11 +14,8 @@ fn main() {
     let file = File::open("test.py").unwrap();
     let mut buf_reader = BufReader::new(file);
     let mut prog = String::new();
-    buf_reader.read_to_string(&mut prog);
+    buf_reader.read_to_string(&mut prog).expect("Error: read_to_string");
     let tokens = tokenize(prog);
-
-    print_tokens(&tokens);
-
     let program = tokens.into_iter().peekable().parse();
     let mut env = HashMap::new();
     match program.exec(&mut env) {
@@ -28,6 +25,5 @@ fn main() {
     match env.get(&String::from("x")).unwrap() {
         &Value::IntVal(i) => print!("{}", i),
         &Value::BoolVal(b) => print!("{}", b),
-        _ => panic!("Error")
     };
 }
