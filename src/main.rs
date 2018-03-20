@@ -21,7 +21,10 @@ fn main() {
 
     let program = tokens.into_iter().peekable().parse();
     let mut env = HashMap::new();
-    program.exec(&mut env);
+    match program.exec(&mut env) {
+        Ok(_) => (),
+        Err(_) => panic!("Invalid control operator")
+    };
     match env.get(&String::from("x")).unwrap() {
         &Value::IntVal(i) => print!("{}", i),
         &Value::BoolVal(b) => print!("{}", b),

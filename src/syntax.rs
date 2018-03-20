@@ -14,11 +14,14 @@ pub enum Expr {
 }
 
 pub enum SimpleStmt {
-    AssignStmt(Id, Expr)
+    AssignStmt(Id, Expr),
+    BreakStmt,
+    ContinueStmt
 }
 
 pub enum CompoundStmt {
-    IfStmt(Expr, Program, Program)
+    IfStmt(Expr, Program, Program),
+    WhileStmt(Expr, Program)
 }
 
 pub enum Stmt {

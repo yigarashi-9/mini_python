@@ -9,6 +9,9 @@ pub enum Token {
     False,
     If,
     Else,
+    While,
+    Break,
+    Continue,
     Plus,
     Lt,
     Eq,
@@ -39,6 +42,9 @@ fn ident_to_token(s: String) -> Token {
         "false" => Token::False,
         "if" => Token::If,
         "else" => Token::Else,
+        "while" => Token::While,
+        "break" => Token::Break,
+        "continue" => Token::Continue,
         _ => Token::Ident(s),
     }
 }

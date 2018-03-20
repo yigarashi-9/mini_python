@@ -27,13 +27,16 @@ aexpr -> LParen expr RParen
        | Int
  */
 
-pub trait Parser {
+pub trait TokenStream {
     fn parse(&mut self) -> Program;
     fn program(&mut self) -> Program;
     fn block(&mut self) -> Program;
     fn statement(&mut self) -> Stmt;
     fn simple_stmt(&mut self) -> SimpleStmt;
+    fn is_compound(&mut self) -> bool;
     fn compound_stmt(&mut self) -> CompoundStmt;
+    fn if_stmt(&mut self) -> CompoundStmt;
+    fn while_stmt(&mut self) -> CompoundStmt;
     fn expr(&mut self) -> Expr;
     fn pexpr(&mut self) -> Expr;
     fn aexpr(&mut self) -> Expr;
@@ -43,7 +46,7 @@ pub trait Parser {
     fn consume_int(&mut self) -> i32;
 }
 
-impl<I: Iterator<Item = Token>> Parser for Peekable<I> {
+impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     fn parse(&mut self) -> Program {
         self.program()
     }
@@ -83,22 +86,52 @@ impl<I: Iterator<Item = Token>> Parser for Peekable<I> {
     }
 
     fn statement(&mut self) -> Stmt {
-        match self.peek() {
-            Some(&Token::If) => Stmt::StmtCompound(self.compound_stmt()),
-            Some(_) => Stmt::StmtSimple(self.simple_stmt()),
-            None => panic!("Parse Error: statement"),
+        if self.is_compound() {
+            Stmt::StmtCompound(self.compound_stmt())
+        } else {
+            Stmt::StmtSimple(self.simple_stmt())
         }
     }
 
     fn simple_stmt(&mut self) -> SimpleStmt {
-        let ident = self.consume_ident();
-        self.consume(Token::Eq);
-        let expr = self.expr();
-        self.consume(Token::NewLine);
-        SimpleStmt::AssignStmt(ident, expr)
+        match self.peek() {
+            Some(&Token::Break) => {
+                self.consume(Token::Break);
+                self.consume(Token::NewLine);
+                SimpleStmt::BreakStmt
+            },
+            Some(&Token::Continue) => {
+                self.consume(Token::Continue);
+                self.consume(Token::NewLine);
+                SimpleStmt::ContinueStmt
+            },
+            _ => {
+                let ident = self.consume_ident();
+                self.consume(Token::Eq);
+                let expr = self.expr();
+                self.consume(Token::NewLine);
+                SimpleStmt::AssignStmt(ident, expr)
+            },
+        }
+    }
+
+    fn is_compound(&mut self) -> bool {
+        match self.peek() {
+            Some(&Token::If) => true,
+            Some(&Token::While) => true,
+            _ => false,
+        }
     }
 
     fn compound_stmt(&mut self) -> CompoundStmt {
+        match self.peek() {
+            Some(&Token::If) => self.if_stmt(),
+            Some(&Token::While) => self.while_stmt(),
+            _ => panic!("Parse Error: compound_stmt"),
+        }
+    }
+
+    fn if_stmt(&mut self) -> CompoundStmt {
         self.consume(Token::If);
         let expr = self.expr();
         self.consume(Token::Colon);
@@ -109,6 +142,15 @@ impl<I: Iterator<Item = Token>> Parser for Peekable<I> {
         self.consume(Token::NewLine);
         let prog_else = self.block();
         CompoundStmt::IfStmt(expr, prog_then, prog_else)
+    }
+
+    fn while_stmt(&mut self) -> CompoundStmt {
+        self.consume(Token::While);
+        let expr = self.expr();
+        self.consume(Token::Colon);
+        self.consume(Token::NewLine);
+        let prog = self.block();
+        CompoundStmt::WhileStmt(expr, prog)
     }
 
     fn expr(&mut self) -> Expr {
