@@ -1,28 +1,6 @@
 use std::iter::Peekable;
 use std::str::Chars;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Token {
-    Ident(String),
-    Int(i32),
-    True,
-    False,
-    If,
-    Else,
-    While,
-    Break,
-    Continue,
-    Plus,
-    Lt,
-    Eq,
-    LParen,
-    RParen,
-    Colon,
-    NewLine,
-    Indent,
-    Dedent,
-    EOF,
-}
+use token::Token;
 
 fn symbol_to_token(ch: char) -> Token {
     match ch {
@@ -32,12 +10,14 @@ fn symbol_to_token(ch: char) -> Token {
         '(' => Token::LParen,
         ')' => Token::RParen,
         ':' => Token::Colon,
+        ',' => Token::Comma,
         _   => panic!("Invalid symbol"),
     }
 }
 
 fn ident_to_token(s: String) -> Token {
     match &s[..] {
+        "None" => Token::None,
         "true" => Token::True,
         "false" => Token::False,
         "if" => Token::If,
@@ -45,6 +25,8 @@ fn ident_to_token(s: String) -> Token {
         "while" => Token::While,
         "break" => Token::Break,
         "continue" => Token::Continue,
+        "def" => Token::Def,
+        "return" => Token::Return,
         _ => Token::Ident(s),
     }
 }
@@ -127,7 +109,7 @@ pub fn tokenize(s: String) -> Vec<Token> {
                         .collect();
                     tokens.push(Token::Int(num.parse::<i32>().unwrap()));
                 },
-                '+' | '<' | '=' | '(' | ')' | ':' => {
+                '+' | '<' | '=' | '(' | ')' | ':' | ',' => {
                     blank_line = false;
                     let nch = it.next().unwrap();
                     tokens.push(symbol_to_token(nch))

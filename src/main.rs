@@ -1,6 +1,5 @@
 extern crate core;
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -8,6 +7,7 @@ use std::io::prelude::*;
 use core::syntax::*;
 use core::lexer::*;
 use core::parser::*;
+use core::env::*;
 use core::eval::*;
 
 fn main() {
@@ -17,13 +17,15 @@ fn main() {
     buf_reader.read_to_string(&mut prog).expect("Error: read_to_string");
     let tokens = tokenize(prog);
     let program = tokens.into_iter().peekable().parse();
-    let mut env = HashMap::new();
+    let mut env = Env::new();
     match program.exec(&mut env) {
-        Ok(_) => (),
-        Err(_) => panic!("Invalid control operator")
+        CtrlOp::Nop => (),
+        _ => panic!("Invalid control operator")
     };
-    match env.get(&String::from("x")).unwrap() {
+    match env.get(&String::from("x")) {
         &Value::IntVal(i) => print!("{}", i),
         &Value::BoolVal(b) => print!("{}", b),
+        &Value::NoneVal => print!("None"),
+        &Value::FunVal(_, _) => print!("<fun>"),
     };
 }
