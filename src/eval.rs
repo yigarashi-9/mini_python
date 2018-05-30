@@ -48,7 +48,7 @@ impl Evaluable for Expr {
                         let mut child_env = Env::new_child(env, keys, vals);
                         match prog.exec(&mut child_env) {
                             CtrlOp::Nop => Value::NoneVal,
-                            CtrlOp::Return => child_env.ret_val.unwrap(),
+                            CtrlOp::Return(val) => val,
                             _ => panic!("Invalid control operator"),
                         }
                     },
@@ -70,7 +70,7 @@ fn is_true_value(res: &Value) -> bool {
 
 pub enum CtrlOp {
     Nop,
-    Return,
+    Return(Value),
     Break,
     Continue,
 }
@@ -88,8 +88,7 @@ impl Executable for SimpleStmt {
                 CtrlOp::Nop
             },
             &SimpleStmt::ReturnStmt(ref expr) => {
-                env.ret_val = Some(expr.eval(env));
-                CtrlOp::Return
+                CtrlOp::Return(expr.eval(env))
             },
             &SimpleStmt::BreakStmt => CtrlOp::Break,
             &SimpleStmt::ContinueStmt => CtrlOp::Continue,
@@ -110,7 +109,7 @@ impl Executable for CompoundStmt {
             &CompoundStmt::WhileStmt(ref expr, ref prog) => {
                 while is_true_value(&expr.eval(env)) {
                     match prog.exec(env) {
-                        CtrlOp::Return => return CtrlOp::Return,
+                        CtrlOp::Return(e) => return CtrlOp::Return(e),
                         CtrlOp::Break => break,
                         _ => continue,
                     }
@@ -139,9 +138,7 @@ impl Executable for Program {
         for stmt in self {
             match stmt.exec(env) {
                 CtrlOp::Nop => continue,
-                CtrlOp::Return => return CtrlOp::Return,
-                CtrlOp::Break => return CtrlOp::Break,
-                CtrlOp::Continue => return CtrlOp::Continue,
+                cop => return cop
             }
         };
         CtrlOp::Nop

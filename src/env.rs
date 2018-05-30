@@ -4,12 +4,11 @@ use syntax::*;
 pub struct Env<'a> {
     parent: Option<&'a Env<'a>>,
     map: HashMap<Id, Value>,
-    pub ret_val: Option<Value>,
 }
 
 impl <'a>Env<'a> {
     pub fn new() -> Env<'a> {
-        Env { parent: None, map: HashMap::new(), ret_val: None }
+        Env { parent: None, map: HashMap::new() }
     }
 
     pub fn new_child(parent: &'a Env, keys: Vec<Id>, vals: Vec<Value>) -> Env<'a> {
@@ -22,7 +21,7 @@ impl <'a>Env<'a> {
             map.insert(k.clone(), v.clone());
         }
 
-        Env { parent: Some(parent), map: map, ret_val: None }
+        Env { parent: Some(parent), map: map }
     }
 
     pub fn get(&self, key: &Id) -> &Value {
