@@ -29,6 +29,17 @@ impl Evaluable for Expr {
                     _ => panic!("Type error"),
                 }
             },
+            &Expr::LtExpr(ref e1, ref e2) => {
+                let v1 = e1.eval(env);
+                let v2 = e2.eval(env);
+                match v1 {
+                    Value::IntVal(i1) => match v2 {
+                        Value::IntVal(i2) => Value::BoolVal(i1 < i2),
+                        _ => panic!("Type error"),
+                    },
+                    _ => panic!("Type error"),
+                }
+            },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(env);
                 let v2 = e2.eval(env);
@@ -68,6 +79,7 @@ fn is_true_value(res: &Value) -> bool {
     }
 }
 
+
 pub enum CtrlOp {
     Nop,
     Return(Value),
@@ -95,7 +107,7 @@ impl Executable for SimpleStmt {
             &SimpleStmt::AssertStmt(ref expr) => {
                 match expr.eval(env) {
                     Value::BoolVal(true) => CtrlOp::Nop,
-                    _ => panic!("AssertionError!")
+                    _ => panic!("AssertionError")
                 }
             }
         }

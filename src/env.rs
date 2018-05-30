@@ -29,7 +29,7 @@ impl <'a>Env<'a> {
             Some(ref v) => v,
             None => match self.parent {
                 Some(ref parent) => parent.get(key),
-                None => panic!("Unbound variable"),
+                None => panic!(format!("Unbound variable: {}", key)),
             }
         }
     }

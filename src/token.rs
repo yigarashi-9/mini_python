@@ -16,6 +16,7 @@ pub enum Token {
     Plus,
     Eq,
     EqEq,
+    Lt,
     LParen,
     RParen,
     Colon,

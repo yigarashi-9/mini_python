@@ -27,8 +27,11 @@ parm_list ->
   | Ident(s) Comma parm_list
   | e
 
-expr -> pexpr EqEq pexpr
-      | pexpr
+expr -> eexpr Lt eexpr
+      | eexpr
+
+eexpr -> pexpr EqEq pexpr
+       | pexpr
 
 pexpr -> cexpr Plus pexpr
        | cexpr
@@ -63,6 +66,7 @@ pub trait TokenStream {
     fn def_stmt(&mut self) -> CompoundStmt;
     fn parm_list(&mut self) -> Vec<Id>;
     fn expr(&mut self) -> Expr;
+    fn eexpr(&mut self) -> Expr;
     fn pexpr(&mut self) -> Expr;
     fn cexpr(&mut self) -> Expr;
     fn arg_list(&mut self) -> Vec<Expr>;
@@ -231,6 +235,19 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     }
 
     fn expr(&mut self) -> Expr {
+        let expr1 = self.eexpr();
+        match self.peek() {
+            Some(&Token::Lt) => {
+                self.consume(Token::Lt);
+                let expr2 = self.eexpr();
+                Expr::LtExpr(Box::new(expr1), Box::new(expr2))
+            },
+            Some(_) => expr1,
+            None => panic!("Parse Error: expr"),
+        }
+    }
+
+    fn eexpr(&mut self) -> Expr {
         let expr1 = self.pexpr();
         match self.peek() {
             Some(&Token::EqEq) => {

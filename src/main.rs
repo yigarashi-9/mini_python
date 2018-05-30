@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
 
-use core::syntax::*;
 use core::lexer::*;
 use core::parser::*;
 use core::env::*;
