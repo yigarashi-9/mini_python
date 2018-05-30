@@ -15,7 +15,7 @@ pub enum Expr {
     BoolExpr(bool),
     NoneExpr,
     AddExpr(Box<Expr>, Box<Expr>),
-    LtExpr(Box<Expr>, Box<Expr>),
+    EqEqExpr(Box<Expr>, Box<Expr>),
     CallExpr(Box<Expr>, Vec<Expr>)
 }
 
@@ -24,7 +24,8 @@ pub enum SimpleStmt {
     AssignStmt(Id, Expr),
     BreakStmt,
     ContinueStmt,
-    ReturnStmt(Expr)
+    ReturnStmt(Expr),
+    AssertStmt(Expr)
 }
 
 #[derive(Clone)]

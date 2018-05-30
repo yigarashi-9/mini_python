@@ -21,11 +21,5 @@ fn main() {
     match program.exec(&mut env) {
         CtrlOp::Nop => (),
         _ => panic!("Invalid control operator")
-    };
-    match env.get(&String::from("x")) {
-        &Value::IntVal(i) => print!("{}", i),
-        &Value::BoolVal(b) => print!("{}", b),
-        &Value::NoneVal => print!("None"),
-        &Value::FunVal(_, _) => print!("<fun>"),
-    };
+    }
 }

@@ -5,8 +5,6 @@ use token::Token;
 fn symbol_to_token(ch: char) -> Token {
     match ch {
         '+' => Token::Plus,
-        '<' => Token::Lt,
-        '=' => Token::Eq,
         '(' => Token::LParen,
         ')' => Token::RParen,
         ':' => Token::Colon,
@@ -27,6 +25,7 @@ fn ident_to_token(s: String) -> Token {
         "continue" => Token::Continue,
         "def" => Token::Def,
         "return" => Token::Return,
+        "assert" => Token::Assert,
         _ => Token::Ident(s),
     }
 }
@@ -109,10 +108,20 @@ pub fn tokenize(s: String) -> Vec<Token> {
                         .collect();
                     tokens.push(Token::Int(num.parse::<i32>().unwrap()));
                 },
-                '+' | '<' | '=' | '(' | ')' | ':' | ',' => {
+                '+' | '(' | ')' | ':' | ',' => {
                     blank_line = false;
                     let nch = it.next().unwrap();
                     tokens.push(symbol_to_token(nch))
+                },
+                '=' => {
+                    blank_line = false;
+                    it.next();
+                    if *it.peek().unwrap() != '=' {
+                        tokens.push(Token::Eq)
+                    } else {
+                        it.next();
+                        tokens.push(Token::EqEq)
+                    }
                 },
                 '\n' => {
                     it.next();

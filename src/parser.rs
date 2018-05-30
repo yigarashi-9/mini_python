@@ -15,6 +15,7 @@ simple_stmt ->
   | Return expr?
   | Continue
   | Break
+  | Assert expr
 
 compound_stmt ->
   | If expr Colon NewLine block Else block
@@ -26,7 +27,7 @@ parm_list ->
   | Ident(s) Comma parm_list
   | e
 
-expr -> pexpr Lt pexpr
+expr -> pexpr EqEq pexpr
       | pexpr
 
 pexpr -> cexpr Plus pexpr
@@ -141,6 +142,12 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
                 self.consume(Token::NewLine);
                 SimpleStmt::ReturnStmt(expr)
             },
+            Some(&Token::Assert) => {
+                self.consume(Token::Assert);
+                let expr = self.expr();
+                self.consume(Token::NewLine);
+                SimpleStmt::AssertStmt(expr)
+            },
             _ => {
                 let ident = self.consume_ident();
                 self.consume(Token::Eq);
@@ -226,10 +233,10 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     fn expr(&mut self) -> Expr {
         let expr1 = self.pexpr();
         match self.peek() {
-            Some(&Token::Lt) => {
-                self.consume(Token::Lt);
+            Some(&Token::EqEq) => {
+                self.consume(Token::EqEq);
                 let expr2 = self.pexpr();
-                Expr::LtExpr(Box::new(expr1), Box::new(expr2))
+                Expr::EqEqExpr(Box::new(expr1), Box::new(expr2))
             },
             Some(_) => expr1,
             None => panic!("Parse Error: expr"),
