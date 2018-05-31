@@ -10,7 +10,7 @@ trait Evaluable {
 impl Evaluable for Expr {
     fn eval(&self, env: Rc<Env>) -> Value {
         match self {
-            &Expr::VarExpr(ref id) => get(env, id),
+            &Expr::VarExpr(ref id) => env.get(id),
             &Expr::IntExpr(i) => Value::IntVal(i),
             &Expr::BoolExpr(b) => Value::BoolVal(b),
             &Expr::NoneExpr => Value::NoneVal,
@@ -52,7 +52,7 @@ impl Evaluable for Expr {
                 let vals = args.into_iter().map(|x| x.eval(Rc::clone(&env))).collect();
                 match funv {
                     Value::FunVal(env, keys, prog) => {
-                        match prog.exec(Rc::new(new_child(Rc::clone(&env), keys, vals))) {
+                        match prog.exec(Rc::new(Env::new_child(Rc::clone(&env), keys, vals))) {
                             CtrlOp::Nop => Value::NoneVal,
                             CtrlOp::Return(val) => val,
                             _ => panic!("Invalid control operator"),
@@ -91,7 +91,7 @@ impl Executable for SimpleStmt {
         match self {
             &SimpleStmt::AssignStmt(ref id, ref expr) => {
                 let v = expr.eval(Rc::clone(&env));
-                update(env, id.clone(), v);
+                env.update(id.clone(), v);
                 CtrlOp::Nop
             },
             &SimpleStmt::ReturnStmt(ref expr) => {
@@ -131,8 +131,8 @@ impl Executable for CompoundStmt {
                 CtrlOp::Nop
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
-                update(Rc::clone(&env), id.clone(),
-                       Value::FunVal(Rc::clone(&env), parms.clone(), prog.clone()));
+                Rc::clone(&env).update(
+                    id.clone(), Value::FunVal(Rc::clone(&env), parms.clone(), prog.clone()));
                 CtrlOp::Nop
             }
         }

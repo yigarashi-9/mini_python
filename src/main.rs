@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use core::lexer::*;
 use core::parser::*;
-use core::env;
+use core::env::Env;
 use core::eval::*;
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
     buf_reader.read_to_string(&mut prog).expect("Error: read_to_string");
     let tokens = tokenize(prog);
     let program = tokens.into_iter().peekable().parse();
-    let env = Rc::new(env::new());
+    let env = Rc::new(Env::new());
     match program.exec(env) {
         CtrlOp::Nop => (),
         _ => panic!("Invalid control operator")
