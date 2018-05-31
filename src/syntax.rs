@@ -1,3 +1,7 @@
+use std::rc::Rc;
+
+use env::Env;
+
 pub type Id = String;
 
 #[derive(Clone)]
@@ -5,7 +9,7 @@ pub enum Value {
     IntVal(i32),
     BoolVal(bool),
     NoneVal,
-    FunVal(Vec<Id>, Program)
+    FunVal(Rc<Env>, Vec<Id>, Program)
 }
 
 #[derive(Clone)]

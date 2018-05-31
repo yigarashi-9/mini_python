@@ -1,26 +1,22 @@
+use std::rc::Rc;
+
 use syntax::*;
 use env::*;
 
 trait Evaluable {
-    fn eval(&self, env: &Env) -> Value;
+    fn eval(&self, env: Rc<Env>) -> Value;
 }
 
 impl Evaluable for Expr {
-    fn eval(&self, env: &Env) -> Value {
+    fn eval(&self, env: Rc<Env>) -> Value {
         match self {
-            &Expr::VarExpr(ref id) => match env.get(id) {
-                &Value::IntVal(i) => Value::IntVal(i),
-                &Value::BoolVal(b) => Value::BoolVal(b),
-                &Value::NoneVal => Value::NoneVal,
-                &Value::FunVal(ref params, ref prog) =>
-                    Value::FunVal(params.clone(), prog.clone()),
-            },
+            &Expr::VarExpr(ref id) => get(env, id),
             &Expr::IntExpr(i) => Value::IntVal(i),
             &Expr::BoolExpr(b) => Value::BoolVal(b),
             &Expr::NoneExpr => Value::NoneVal,
             &Expr::AddExpr(ref e1, ref e2) => {
-                let v1 = e1.eval(env);
-                let v2 = e2.eval(env);
+                let v1 = e1.eval(Rc::clone(&env));
+                let v2 = e2.eval(Rc::clone(&env));
                 match v1 {
                     Value::IntVal(i1) => match v2 {
                         Value::IntVal(i2) => Value::IntVal(i1 + i2),
@@ -30,8 +26,8 @@ impl Evaluable for Expr {
                 }
             },
             &Expr::LtExpr(ref e1, ref e2) => {
-                let v1 = e1.eval(env);
-                let v2 = e2.eval(env);
+                let v1 = e1.eval(Rc::clone(&env));
+                let v2 = e2.eval(Rc::clone(&env));
                 match v1 {
                     Value::IntVal(i1) => match v2 {
                         Value::IntVal(i2) => Value::BoolVal(i1 < i2),
@@ -41,8 +37,8 @@ impl Evaluable for Expr {
                 }
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
-                let v1 = e1.eval(env);
-                let v2 = e2.eval(env);
+                let v1 = e1.eval(Rc::clone(&env));
+                let v2 = e2.eval(Rc::clone(&env));
                 match v1 {
                     Value::IntVal(i1) => match v2 {
                         Value::IntVal(i2) => Value::BoolVal(i1 == i2),
@@ -52,12 +48,11 @@ impl Evaluable for Expr {
                 }
             },
             &Expr::CallExpr(ref fun, ref args) => {
-                let funv = fun.eval(env);
-                let vals = args.into_iter().map(|x| x.eval(env)).collect();
+                let funv = fun.eval(Rc::clone(&env));
+                let vals = args.into_iter().map(|x| x.eval(Rc::clone(&env))).collect();
                 match funv {
-                    Value::FunVal(keys, prog) => {
-                        let mut child_env = Env::new_child(env, keys, vals);
-                        match prog.exec(&mut child_env) {
+                    Value::FunVal(env, keys, prog) => {
+                        match prog.exec(Rc::new(new_child(Rc::clone(&env), keys, vals))) {
                             CtrlOp::Nop => Value::NoneVal,
                             CtrlOp::Return(val) => val,
                             _ => panic!("Invalid control operator"),
@@ -88,26 +83,27 @@ pub enum CtrlOp {
 }
 
 pub trait Executable {
-    fn exec(&self, env: &mut Env) -> CtrlOp;
+    fn exec(&self, env: Rc<Env>) -> CtrlOp;
 }
 
 impl Executable for SimpleStmt {
-    fn exec(&self, env: &mut Env) -> CtrlOp {
+    fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
             &SimpleStmt::AssignStmt(ref id, ref expr) => {
-                let v = expr.eval(env);
-                env.update(id.clone(), v);
+                let v = expr.eval(Rc::clone(&env));
+                update(env, id.clone(), v);
                 CtrlOp::Nop
             },
             &SimpleStmt::ReturnStmt(ref expr) => {
-                CtrlOp::Return(expr.eval(env))
+                CtrlOp::Return(expr.eval(Rc::clone(&env)))
             },
             &SimpleStmt::BreakStmt => CtrlOp::Break,
             &SimpleStmt::ContinueStmt => CtrlOp::Continue,
             &SimpleStmt::AssertStmt(ref expr) => {
-                match expr.eval(env) {
-                    Value::BoolVal(true) => CtrlOp::Nop,
-                    _ => panic!("AssertionError")
+                if is_true_value(&expr.eval(Rc::clone(&env))) {
+                    CtrlOp::Nop
+                } else {
+                    panic!("AssertionError")
                 }
             }
         }
@@ -115,18 +111,18 @@ impl Executable for SimpleStmt {
 }
 
 impl Executable for CompoundStmt {
-    fn exec(&self, env: &mut Env) -> CtrlOp {
+    fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
             &CompoundStmt::IfStmt(ref expr, ref prog_then, ref prog_else) => {
-                if is_true_value(&expr.eval(env)) {
-                    prog_then.exec(env)
+                if is_true_value(&expr.eval(Rc::clone(&env))) {
+                    prog_then.exec(Rc::clone(&env))
                 } else {
-                    prog_else.exec(env)
+                    prog_else.exec(Rc::clone(&env))
                 }
             },
             &CompoundStmt::WhileStmt(ref expr, ref prog) => {
-                while is_true_value(&expr.eval(env)) {
-                    match prog.exec(env) {
+                while is_true_value(&expr.eval(Rc::clone(&env))) {
+                    match prog.exec(Rc::clone(&env)) {
                         CtrlOp::Return(e) => return CtrlOp::Return(e),
                         CtrlOp::Break => break,
                         _ => continue,
@@ -135,7 +131,8 @@ impl Executable for CompoundStmt {
                 CtrlOp::Nop
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
-                env.update(id.clone(), Value::FunVal(parms.clone(), prog.clone()));
+                update(Rc::clone(&env), id.clone(),
+                       Value::FunVal(Rc::clone(&env), parms.clone(), prog.clone()));
                 CtrlOp::Nop
             }
         }
@@ -143,18 +140,18 @@ impl Executable for CompoundStmt {
 }
 
 impl Executable for Stmt {
-    fn exec(&self, env: &mut Env) -> CtrlOp {
+    fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
-            &Stmt::StmtSimple(ref simple_stmt) => simple_stmt.exec(env),
-            &Stmt::StmtCompound(ref compound_stmt) => compound_stmt.exec(env)
+            &Stmt::StmtSimple(ref simple_stmt) => simple_stmt.exec(Rc::clone(&env)),
+            &Stmt::StmtCompound(ref compound_stmt) => compound_stmt.exec(Rc::clone(&env))
         }
     }
 }
 
 impl Executable for Program {
-    fn exec(&self, env: &mut Env) -> CtrlOp {
+    fn exec(&self, env: Rc<Env>) -> CtrlOp {
         for stmt in self {
-            match stmt.exec(env) {
+            match stmt.exec(Rc::clone(&env)) {
                 CtrlOp::Nop => continue,
                 cop => return cop
             }

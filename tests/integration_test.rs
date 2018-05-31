@@ -3,17 +3,17 @@ extern crate core;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
+use std::rc::Rc;
 
 use core::lexer::*;
 use core::parser::*;
-use core::env::*;
+use core::env;
 use core::eval::*;
 
 fn run_prog_string(prog: String) {
     let tokens = tokenize(prog);
     let program = tokens.into_iter().peekable().parse();
-    let mut env = Env::new();
-    match program.exec(&mut env) {
+    match program.exec(Rc::new(env::new())) {
         CtrlOp::Nop => (),
         _ => panic!("InvalidCtrlOp")
     }

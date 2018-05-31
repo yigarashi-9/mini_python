@@ -5,4 +5,4 @@ def f():
     return g
 
 x = 10
-assert (f())() == 51
+assert (f())() == 42
