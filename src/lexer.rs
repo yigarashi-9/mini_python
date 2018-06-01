@@ -53,114 +53,124 @@ fn is_whitespace(ch: char) -> bool {
     ch == ' '
 }
 
-fn calc_indent(stack: &mut Vec<usize>, tokens: &mut Vec<Token>,
-               indent_level: usize) -> () {
-    let mut last_indent_level = *(stack.last_mut().unwrap());
-    if indent_level > last_indent_level {
-        stack.push(indent_level);
-        tokens.push(Token::Indent);
-    } else if indent_level < last_indent_level {
-        loop {
-            stack.pop();
-            tokens.push(Token::Dedent);
-            last_indent_level = *(stack.last_mut().unwrap());
-            if indent_level == last_indent_level {
-                break;
-            } else if indent_level > last_indent_level {
-                panic!("Invalid indentation");
+struct Lexer<'a> {
+    it: Peekable<Chars<'a>>,
+    line: usize,
+    row: usize,
+    stack: Vec<usize>,
+    is_line_head: bool,
+    tokens: Vec<Token>
+}
+
+impl <'a>Lexer<'a> {
+    fn new(s: &'a String) -> Lexer<'a> {
+        Lexer { it: s.chars().peekable(), line: 1, row: 1, stack: vec![0],
+                is_line_head: true, tokens: vec![] }
+    }
+
+    fn calc_indent(&mut self, indent_level: usize) -> () {
+        let mut last_indent_level = *(self.stack.last().unwrap());
+        if indent_level > last_indent_level {
+            self.stack.push(indent_level);
+            self.tokens.push(Token::Indent);
+        } else if indent_level < last_indent_level {
+            loop {
+                self.stack.pop();
+                self.tokens.push(Token::Dedent);
+                last_indent_level = *(self.stack.last().unwrap());
+                if indent_level == last_indent_level {
+                    break;
+                } else if indent_level > last_indent_level {
+                    panic!("Invalid indentation");
+                }
             }
         }
     }
-}
 
-fn consume_while<X>(it: &mut Peekable<Chars>, f: X) -> Vec<char>
-where X: Fn(char) -> bool {
-    let mut v: Vec<char> = vec![];
-    while let Some(&ch) = it.peek() {
-        if f(ch) {
-            it.next(); v.push(ch)
-        } else {
-            break;
+    fn consume_while<X>(&mut self, f: X) -> Vec<char>
+    where X: Fn(char) -> bool {
+        let mut v: Vec<char> = vec![];
+        while let Some(&ch) = self.it.peek() {
+            if f(ch) {
+                self.it.next(); v.push(ch)
+            } else {
+                break;
+            }
         }
+        v
     }
-    v
 }
 
 pub fn tokenize(s: String) -> Vec<Token> {
-    let mut stack: Vec<usize> = vec![0];
-    let mut it = s.chars().peekable();
-    let mut tokens: Vec<Token> = vec![];
-    let mut blank_line = true;
-
-    let indent_level = consume_while(&mut it, is_whitespace).len();
-    match it.peek() {
-        Some(&ch) if ch != '\n' =>
-            calc_indent(&mut stack, &mut tokens, indent_level),
-        _ => (),
-    };
-
+    let mut lexer = Lexer::new(&s);
+    let mut ch = '0';
     loop {
-        match it.peek() {
-            Some(&ch) => match ch {
-                '0' ... '9' => {
-                    blank_line = false;
-                    let num: String = consume_while(&mut it, is_number)
-                        .into_iter()
-                        .collect();
-                    tokens.push(Token::Int(num.parse::<i32>().unwrap()));
+        // consume blank lines
+        if lexer.is_line_head {
+            let indent_level = lexer.consume_while(is_whitespace).len();
+            match lexer.it.peek() {
+                Some('\n') => {
+                    lexer.it.next();
+                    continue
                 },
-                '+' | '<' | '(' | ')' | ':' | ',' => {
-                    blank_line = false;
-                    let nch = it.next().unwrap();
-                    tokens.push(symbol_to_token(nch))
+                Some(_) => {
+                    lexer.calc_indent(indent_level);
+                    lexer.is_line_head = false;
                 },
-                '=' => {
-                    blank_line = false;
-                    it.next();
-                    if *it.peek().unwrap() != '=' {
-                        tokens.push(Token::Eq)
-                    } else {
-                        it.next();
-                        tokens.push(Token::EqEq)
-                    }
-                },
-                '\n' => {
-                    it.next();
-                    if !blank_line { tokens.push(Token::NewLine); }
-                    blank_line = true;
+                _ => break,
+            }
+        };
 
-                    let indent_level = consume_while(&mut it, is_whitespace).len();
-                    match it.peek() {
-                        Some(&ch) if ch != '\n' =>
-                            calc_indent(&mut stack, &mut tokens, indent_level),
-                        _ => (),
-                    };
-                }
-                ch if is_alphabet(ch) => {
-                    blank_line = false;
-                    let nch = it.next().unwrap();
-                    let mut id_vec = consume_while(&mut it, is_alphanumeric);
-                    id_vec.insert(0, nch);
-                    tokens.push(ident_to_token(id_vec.into_iter().collect()));
-                },
-                ch if is_whitespace(ch) => {
-                    consume_while(&mut it, is_whitespace);
-                }
-                _ => panic!("Invalid char"),
+        match lexer.it.peek() {
+            Some(&ch_) => { ch = ch_ },
+            None => break
+        };
+
+        match ch {
+            '0' ... '9' => {
+                let num: String = lexer.consume_while(is_number).into_iter().collect();
+                lexer.tokens.push(Token::Int(num.parse::<i32>().unwrap()));
             },
-            None => break,
+            '+' | '<' | '(' | ')' | ':' | ',' => {
+                let nch = lexer.it.next().unwrap();
+                lexer.tokens.push(symbol_to_token(nch))
+            },
+            '=' => {
+                lexer.it.next();
+                if *lexer.it.peek().unwrap() != '=' {
+                    lexer.tokens.push(Token::Eq)
+                } else {
+                    lexer.it.next();
+                    lexer.tokens.push(Token::EqEq)
+                }
+            },
+            '\n' => {
+                lexer.it.next();
+                lexer.tokens.push(Token::NewLine);
+                lexer.is_line_head = true;
+            }
+            ch if is_alphabet(ch) => {
+                let nch = lexer.it.next().unwrap();
+                let mut id_vec = lexer.consume_while(is_alphanumeric);
+                id_vec.insert(0, nch);
+                lexer.tokens.push(ident_to_token(id_vec.into_iter().collect()));
+            },
+            ch if is_whitespace(ch) => {
+                lexer.consume_while(is_whitespace);
+            }
+            _ => panic!("Invalid char"),
         }
     };
 
     loop {
-        match stack.pop() {
-            Some(i) if i != 0 => tokens.push(Token::Dedent),
+        match lexer.stack.pop() {
+            Some(i) if i != 0 => lexer.tokens.push(Token::Dedent),
             _ => break,
         }
     }
 
-    tokens.push(Token::EOF);
-    tokens
+    lexer.tokens.push(Token::EOF);
+    lexer.tokens
 }
 
 pub fn print_tokens(tokens: &Vec<Token>) {
