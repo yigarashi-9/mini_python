@@ -12,7 +12,6 @@ use core::eval::*;
 
 fn run_prog_string(prog: String) {
     let tokens = tokenize(prog);
-    print_tokens(&tokens);
     let program = tokens.into_iter().peekable().parse();
     match program.exec(Rc::new(Env::new())) {
         CtrlOp::Nop => (),
@@ -52,7 +51,8 @@ fn assert_false() {
 }
 
 test_cases![
-    blank_lines, if_false, if_true,
+    blank_lines, consecutive_call, if_false, if_true,
     while_normal, while_continue, while_break,
-    def, def_argument, def_recursive, def_internal, def_ho, def_lexical_scope
+    def, def_argument, def_recursive, def_internal, def_ho, def_lexical_scope,
+    class_var, class_instance_var, class_method, assign_attr, class_update
 ];

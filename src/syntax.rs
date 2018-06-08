@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use env::Env;
@@ -9,7 +11,10 @@ pub enum Value {
     IntVal(i32),
     BoolVal(bool),
     NoneVal,
-    FunVal(Rc<Env>, Vec<Id>, Program)
+    FunVal(Rc<Env>, Vec<Id>, Program),
+    ClassVal(RefCell<HashMap<Id, Rc<Value>>>),
+    InstanceVal(Rc<Value>, RefCell<HashMap<Id, Rc<Value>>>),
+    MethodVal(Rc<Value>, Rc<Env>, Vec<Id>, Program)
 }
 
 #[derive(Clone)]
@@ -21,23 +26,51 @@ pub enum Expr {
     AddExpr(Box<Expr>, Box<Expr>),
     LtExpr(Box<Expr>, Box<Expr>),
     EqEqExpr(Box<Expr>, Box<Expr>),
-    CallExpr(Box<Expr>, Vec<Expr>)
+    CallExpr(Box<Expr>, Vec<Expr>),
+    AttrExpr(Box<Expr>, Id)
+}
+
+impl Expr {
+    pub fn to_string(&self) -> String {
+        let str = match self {
+            &Expr::VarExpr(_) => "VarExpr",
+            &Expr::IntExpr(_) => "IntExpr",
+            &Expr::BoolExpr(_) => "BoolExpr",
+            &Expr::NoneExpr => "NoneExpr",
+            &Expr::AddExpr(_, _) => "AddExpr",
+            &Expr::LtExpr(_, _) => "LtExpr",
+            &Expr::EqEqExpr(_, _) => "EqEqExpr",
+            &Expr::CallExpr(_, _) => "CallExpr",
+            &Expr::AttrExpr(_, _) => "AttrExpr",
+        };
+        str.to_string()
+    }
+}
+
+#[derive(Clone)]
+pub enum Target {
+    IdentTarget(Id),
+    AttrTarget(Box<Expr>, Id)
 }
 
 #[derive(Clone)]
 pub enum SimpleStmt {
-    AssignStmt(Id, Expr),
+    ExprStmt(Expr),
+    AssignStmt(Target, Expr),
     BreakStmt,
     ContinueStmt,
     ReturnStmt(Expr),
     AssertStmt(Expr)
 }
 
+
+
 #[derive(Clone)]
 pub enum CompoundStmt {
     IfStmt(Expr, Program, Program),
     WhileStmt(Expr, Program),
-    DefStmt(Id, Vec<Id>, Program)
+    DefStmt(Id, Vec<Id>, Program),
+    ClassStmt(Id, Program)
 }
 
 #[derive(Clone)]

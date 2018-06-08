@@ -7,20 +7,26 @@ program -> statement* EOF
 
 block -> Indent statement+ Dedent | e
 
-statement -> simple_stmt
+statement -> simple_stmt NewLine
            | compound_stmt
 
 simple_stmt ->
-  | Ident(s) = expr NewLine
+  | expr
+  | target = expr
   | Return expr?
   | Continue
   | Break
   | Assert expr
 
+target ->
+  | Ident
+  | cexpr Dot Ident
+
 compound_stmt ->
   | If expr Colon NewLine block Else block
   | While expr Colon NewLine block
   | Def Ident(s) LParen parm_list RParen Colon NewLine block
+  | Class Ident(s) Colon NewLine block
 
 parm_list ->
   | Ident(s)
@@ -36,13 +42,11 @@ eexpr -> pexpr EqEq pexpr
 pexpr -> cexpr Plus pexpr
        | cexpr
 
-cexpr -> aexpr LParen arg_list RParen
+cexpr -> aexpr successor*
        | aexpr
 
-arg_list ->
-  | expr
-  | expr Comma arg_list
-  | e
+successor -> LParen arg_list RParen
+           | Dot Ident
 
 aexpr -> LParen expr RParen
        | True
@@ -51,6 +55,10 @@ aexpr -> LParen expr RParen
        | Int
        | None
 
+arg_list ->
+  | expr
+  | expr Comma arg_list
+  | e
  */
 
 pub trait TokenStream {
@@ -64,6 +72,7 @@ pub trait TokenStream {
     fn if_stmt(&mut self) -> CompoundStmt;
     fn while_stmt(&mut self) -> CompoundStmt;
     fn def_stmt(&mut self) -> CompoundStmt;
+    fn class_stmt(&mut self) -> CompoundStmt;
     fn parm_list(&mut self) -> Vec<Id>;
     fn expr(&mut self) -> Expr;
     fn eexpr(&mut self) -> Expr;
@@ -121,7 +130,9 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         if self.is_compound() {
             Stmt::StmtCompound(self.compound_stmt())
         } else {
-            Stmt::StmtSimple(self.simple_stmt())
+            let stmt = Stmt::StmtSimple(self.simple_stmt());
+            self.consume(Token::NewLine);
+            stmt
         }
     }
 
@@ -129,12 +140,10 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         match self.peek() {
             Some(&Token::Break) => {
                 self.consume(Token::Break);
-                self.consume(Token::NewLine);
                 SimpleStmt::BreakStmt
             },
             Some(&Token::Continue) => {
                 self.consume(Token::Continue);
-                self.consume(Token::NewLine);
                 SimpleStmt::ContinueStmt
             },
             Some(&Token::Return) => {
@@ -143,21 +152,31 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
                 if !self.match_token(Token::NewLine) {
                     expr = self.expr();
                 }
-                self.consume(Token::NewLine);
                 SimpleStmt::ReturnStmt(expr)
             },
             Some(&Token::Assert) => {
                 self.consume(Token::Assert);
                 let expr = self.expr();
-                self.consume(Token::NewLine);
                 SimpleStmt::AssertStmt(expr)
             },
             _ => {
-                let ident = self.consume_ident();
-                self.consume(Token::Eq);
                 let expr = self.expr();
-                self.consume(Token::NewLine);
-                SimpleStmt::AssignStmt(ident, expr)
+                match self.peek() {
+                    Some(&Token::Eq) => {
+                        let target = match expr {
+                            Expr::VarExpr(id) => Target::IdentTarget(id),
+                            Expr::AttrExpr(expr, id) => Target::AttrTarget(expr, id),
+                            _ => panic!("Parse Error: Assign Target")
+                        };
+                        self.consume(Token::Eq);
+                        let expr = self.expr();
+                        SimpleStmt::AssignStmt(target, expr)
+                    },
+                    Some(&Token::NewLine) => {
+                        SimpleStmt::ExprStmt(expr)
+                    },
+                    _ => panic!("Parse Error: AssignStmt")
+                }
             },
         }
     }
@@ -167,6 +186,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
             Some(&Token::If) => true,
             Some(&Token::While) => true,
             Some(&Token::Def) => true,
+            Some(&Token::Class) => true,
             _ => false,
         }
     }
@@ -176,6 +196,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
             Some(&Token::If) => self.if_stmt(),
             Some(&Token::While) => self.while_stmt(),
             Some(&Token::Def) => self.def_stmt(),
+            Some(&Token::Class) => self.class_stmt(),
             _ => panic!("Parse Error: compound_stmt"),
         }
     }
@@ -212,6 +233,15 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         self.consume(Token::NewLine);
         let prog = self.block();
         CompoundStmt::DefStmt(fun_name, parm_list, prog)
+    }
+
+    fn class_stmt(&mut self) -> CompoundStmt {
+        self.consume(Token::Class);
+        let class_name = self.consume_ident();
+        self.consume(Token::Colon);
+        self.consume(Token::NewLine);
+        let prog = self.block();
+        CompoundStmt::ClassStmt(class_name, prog)
     }
 
     fn parm_list(&mut self) -> Vec<Id> {
@@ -274,50 +304,23 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     }
 
     fn cexpr(&mut self) -> Expr {
-        let expr = self.aexpr();
-        match self.peek() {
-            Some(&Token::LParen) => {
-                self.consume(Token::LParen);
-                let arg_list = self.arg_list();
-                self.consume(Token::RParen);
-                Expr::CallExpr(Box::new(expr), arg_list)
-            },
-            Some(_) => expr,
-            None => panic!("Parse Error: pexpr"),
-        }
-    }
-
-    fn arg_list(&mut self) -> Vec<Expr> {
-        let mut al: Vec<Expr>  = vec![];
-
-        if self.is_expr() {
-            al.push(self.expr());
-        } else {
-            return al;
-        }
-
+        let mut expr = self.aexpr();
         loop {
             match self.peek() {
-                Some(&Token::Comma) => {
-                    self.consume(Token::Comma);
-                    al.push(self.expr());
+                Some(&Token::LParen) => {
+                    self.consume(Token::LParen);
+                    let arg_list = self.arg_list();
+                    self.consume(Token::RParen);
+                    expr = Expr::CallExpr(Box::new(expr), arg_list)
                 },
-                Some(_) => break,
-                _ => panic!("Parse Error: parm_list"),
+                Some(&Token::Dot) => {
+                    self.consume(Token::Dot);
+                    let ident = self.consume_ident();
+                    expr = Expr::AttrExpr(Box::new(expr), ident)
+                },
+                Some(_) => return expr,
+                None => panic!("Parse Error: cexpr"),
             }
-        };
-        al
-    }
-
-    fn is_expr(&mut self) -> bool {
-        match self.peek() {
-            Some(&Token::LParen) => true,
-            Some(&Token::True) => true,
-            Some(&Token::False) => true,
-            Some(&Token::Ident(_)) => true,
-            Some(&Token::Int(_)) => true,
-            Some(&Token::None) => true,
-            _ => false,
         }
     }
 
@@ -349,6 +352,40 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         }
     }
 
+    fn is_expr(&mut self) -> bool {
+        match self.peek() {
+            Some(&Token::LParen) => true,
+            Some(&Token::True) => true,
+            Some(&Token::False) => true,
+            Some(&Token::Ident(_)) => true,
+            Some(&Token::Int(_)) => true,
+            Some(&Token::None) => true,
+            _ => false,
+        }
+    }
+
+    fn arg_list(&mut self) -> Vec<Expr> {
+        let mut al: Vec<Expr>  = vec![];
+
+        if self.is_expr() {
+            al.push(self.expr());
+        } else {
+            return al;
+        }
+
+        loop {
+            match self.peek() {
+                Some(&Token::Comma) => {
+                    self.consume(Token::Comma);
+                    al.push(self.expr());
+                },
+                Some(_) => break,
+                _ => panic!("Parse Error: parm_list"),
+            }
+        };
+        al
+    }
+
     fn match_token(&mut self, token: Token) -> bool {
         match self.peek() {
             Some(token_) if token == *token_ => true,
@@ -357,24 +394,24 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     }
 
     fn consume(&mut self, token: Token) -> () {
-        if self.match_token(token) {
+        if self.match_token(token.clone()) {
             self.next();
         } else {
-            panic!("Unexpected token");
+            panic!("Parse Error: {:?} expected", token);
         }
     }
 
     fn consume_ident(&mut self) -> String {
         match self.next() {
             Some(Token::Ident(ref s)) => s.clone(),
-            _ => panic!("Unexpected token"),
+            _ => panic!("Parse Error: Ident expected"),
         }
     }
 
     fn consume_int(&mut self) -> i32 {
         match self.next() {
             Some(Token::Int(ref i)) => i.clone(),
-            _ => panic!("Unexpected token"),
+            _ => panic!("Parse Error: int expected"),
         }
     }
 }

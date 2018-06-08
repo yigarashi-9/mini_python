@@ -10,6 +10,7 @@ fn symbol_to_token(ch: char) -> Token {
         ')' => Token::RParen,
         ':' => Token::Colon,
         ',' => Token::Comma,
+        '.' => Token::Dot,
         _   => panic!("Invalid symbol"),
     }
 }
@@ -27,6 +28,7 @@ fn ident_to_token(s: String) -> Token {
         "def" => Token::Def,
         "return" => Token::Return,
         "assert" => Token::Assert,
+        "class" => Token::Class,
         _ => Token::Ident(s),
     }
 }
@@ -131,7 +133,7 @@ pub fn tokenize(s: String) -> Vec<Token> {
                 let num: String = lexer.consume_while(is_number).into_iter().collect();
                 lexer.tokens.push(Token::Int(num.parse::<i32>().unwrap()));
             },
-            '+' | '<' | '(' | ')' | ':' | ',' => {
+            '+' | '<' | '(' | ')' | ':' | ',' | '.' => {
                 let nch = lexer.it.next().unwrap();
                 lexer.tokens.push(symbol_to_token(nch))
             },
