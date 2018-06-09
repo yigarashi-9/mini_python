@@ -51,39 +51,51 @@ impl Evaluable for Expr {
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
-                match *funv {
-                    Value::FunVal(ref funenv, ref keys, ref prog) => {
-                        let vals = args.into_iter().map(|x| x.eval(Rc::clone(&env))).collect();
-                        match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, &vals)))
-                        {
-                            CtrlOp::Nop => Rc::new(Value::NoneVal),
-                            CtrlOp::Return(val) => val,
-                            _ => panic!("Invalid control operator"),
-                        }
-                    },
-                    Value::MethodVal(ref self_val, ref funenv, ref keys, ref prog) => {
-                        let mut vals = vec![Rc::clone(self_val)];
-                        for arg in args.into_iter() {
-                            vals.push(arg.eval(Rc::clone(&env)));
-                        }
-                        match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, &vals)))
-                        {
-                            CtrlOp::Nop => Rc::new(Value::NoneVal),
-                            CtrlOp::Return(val) => val,
-                            _ => panic!("Invalid control operator"),
-                        }
-                    },
-                    Value::ClassVal(ref map) => {
-                        create_instance(Rc::clone(&funv), map)
-                    },
-                    _ => panic!("Type Error: Callable expected"),
-                }
+                let mut vals = args.into_iter().map(|x| x.eval(Rc::clone(&env))).collect();
+                call_func(funv, &mut vals)
             },
             &Expr::AttrExpr(ref e, ref ident) => {
                 let v = e.eval(Rc::clone(&env));
                 get_attr(v, ident)
             }
         }
+    }
+}
+
+fn call_func(funv: Rc<Value>, args: &mut Vec<Rc<Value>>) -> Rc<Value> {
+    match *funv {
+        Value::FunVal(ref funenv, ref keys, ref prog) => {
+            match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, args))) {
+                CtrlOp::Nop => Rc::new(Value::NoneVal),
+                CtrlOp::Return(val) => val,
+                _ => panic!("Invalid control operator"),
+            }
+        },
+        Value::MethodVal(ref self_val, ref funenv, ref keys, ref prog) => {
+            let mut vals = vec![Rc::clone(self_val)];
+            vals.append(args);
+            match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, &vals))) {
+                CtrlOp::Nop => Rc::new(Value::NoneVal),
+                CtrlOp::Return(val) => val,
+                _ => panic!("Invalid control operator"),
+            }
+        },
+        Value::ClassVal(ref map) => {
+            let instance = create_instance(Rc::clone(&funv), map);
+            match *instance {
+                Value::InstanceVal(_, ref map) => {
+                    let init_fun_opt = get_val(map, &"__init__".to_string());
+                    match init_fun_opt {
+                        Some(init_fun) => call_func(Rc::clone(&init_fun), args),
+                        None => Rc::new(Value::NoneVal)
+                    };
+                },
+                _ => panic!("Never happenes")
+            }
+            instance
+
+        },
+        _ => panic!("Type Error: Callable expected"),
     }
 }
 
