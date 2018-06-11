@@ -8,9 +8,14 @@ fn symbol_to_token(ch: char) -> Token {
         '<' => Token::Lt,
         '(' => Token::LParen,
         ')' => Token::RParen,
+        '[' => Token::LBracket,
+        ']' => Token::RBracket,
+        '{' => Token::LBrace,
+        '}' => Token::RBrace,
         ':' => Token::Colon,
         ',' => Token::Comma,
         '.' => Token::Dot,
+
         _   => panic!("Invalid symbol"),
     }
 }
@@ -53,6 +58,14 @@ fn is_alphanumeric(ch: char) -> bool {
 
 fn is_whitespace(ch: char) -> bool {
     ch == ' '
+}
+
+fn is_not_quote(ch: char) -> bool {
+    ch != '\''
+}
+
+fn is_not_dquote(ch: char) -> bool {
+    ch != '"'
 }
 
 struct Lexer<'a> {
@@ -105,7 +118,6 @@ impl <'a>Lexer<'a> {
 
 pub fn tokenize(s: String) -> Vec<Token> {
     let mut lexer = Lexer::new(&s);
-    let mut ch = '0';
     loop {
         // consume blank lines
         if lexer.is_line_head {
@@ -123,6 +135,7 @@ pub fn tokenize(s: String) -> Vec<Token> {
             }
         };
 
+        let mut ch = '0';
         match lexer.it.peek() {
             Some(&ch_) => { ch = ch_ },
             None => break
@@ -133,7 +146,19 @@ pub fn tokenize(s: String) -> Vec<Token> {
                 let num: String = lexer.consume_while(is_number).into_iter().collect();
                 lexer.tokens.push(Token::Int(num.parse::<i32>().unwrap()));
             },
-            '+' | '<' | '(' | ')' | ':' | ',' | '.' => {
+            '\'' => {
+                lexer.it.next();
+                let s: String = lexer.consume_while(is_not_quote).into_iter().collect();
+                lexer.tokens.push(Token::Str(s));
+                lexer.it.next();
+            },
+            '"' => {
+                lexer.it.next();
+                let s: String = lexer.consume_while(is_not_dquote).into_iter().collect();
+                lexer.tokens.push(Token::Str(s));
+                lexer.it.next();
+            },
+            '+' | '<' | '(' | ')' | '[' | ']' | '{' | '}' | ':' | ',' | '.' => {
                 let nch = lexer.it.next().unwrap();
                 lexer.tokens.push(symbol_to_token(nch))
             },

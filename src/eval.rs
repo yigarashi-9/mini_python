@@ -15,6 +15,7 @@ impl Evaluable for Expr {
             &Expr::VarExpr(ref id) => env.get(id),
             &Expr::IntExpr(i) => Rc::new(Value::IntVal(i)),
             &Expr::BoolExpr(b) => Rc::new(Value::BoolVal(b)),
+            &Expr::StrExpr(ref s) => Rc::new(Value::StrVal(s.clone())),
             &Expr::NoneExpr => Rc::new(Value::NoneVal),
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
@@ -41,13 +42,7 @@ impl Evaluable for Expr {
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match *v1 {
-                    Value::IntVal(i1) => match *v2 {
-                        Value::IntVal(i2) => Rc::new(Value::BoolVal(i1 == i2)),
-                        _ => panic!("Type error"),
-                    },
-                    _ => panic!("Type error"),
-                }
+                Rc::new(Value::BoolVal(v1 == v2))
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -57,6 +52,23 @@ impl Evaluable for Expr {
             &Expr::AttrExpr(ref e, ref ident) => {
                 let v = e.eval(Rc::clone(&env));
                 get_attr(v, ident)
+            },
+            &Expr::SubscrExpr(ref e1, ref e2) => {
+                let v1 = e1.eval(Rc::clone(&env));
+                let v2 = e2.eval(Rc::clone(&env));
+                match *v1 {
+                    Value::DictVal(ref dict) => Rc::clone(dict.borrow().get(&v2).unwrap()),
+                    _ => panic!("Runtime Error: SubscrExpr")
+                }
+            },
+            &Expr::DictExpr(ref pl) => {
+                let mut dict = HashMap::new();
+                for (e1, e2) in pl {
+                    let v1 = e1.eval(Rc::clone(&env));
+                    let v2 = e2.eval(Rc::clone(&env));
+                    dict.insert(v1, v2);
+                }
+                Rc::new(Value::DictVal(RefCell::new(dict)))
             }
         }
     }
@@ -201,9 +213,18 @@ impl Executable for SimpleStmt {
                         env.update(id.clone(), v);
                     },
                     &Target::AttrTarget(ref lexpr, ref id) => {
-                        let lv = lexpr.eval(Rc::clone(&env));
                         let rv = rexpr.eval(Rc::clone(&env));
+                        let lv = lexpr.eval(Rc::clone(&env));
                         update_attr(lv, id, rv);
+                    },
+                    &Target::SubscrTarget(ref e1, ref e2) => {
+                        let rv = rexpr.eval(Rc::clone(&env));
+                        let v1 = e1.eval(Rc::clone(&env));
+                        let v2 = e2.eval(Rc::clone(&env));
+                        match *v1 {
+                            Value::DictVal(ref dict) => dict.borrow_mut().insert(v2, rv),
+                            _ => panic!("Type Error: AssignStmt")
+                        };
                     },
                     _ => {
                         panic!("Type Error: AssignStmt");

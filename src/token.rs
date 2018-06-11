@@ -2,6 +2,7 @@
 pub enum Token {
     Ident(String),
     Int(i32),
+    Str(String),
     None,
     True,
     False,
@@ -20,6 +21,10 @@ pub enum Token {
     Lt,
     LParen,
     RParen,
+    LBracket,
+    RBracket,
+    LBrace,
+    RBrace,
     Colon,
     Comma,
     Dot,

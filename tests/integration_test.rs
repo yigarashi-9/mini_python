@@ -51,8 +51,9 @@ fn assert_false() {
 }
 
 test_cases![
-    blank_lines, consecutive_call, if_false, if_true,
+    blank_lines, parse_string, consecutive_call, if_false, if_true,
     while_normal, while_continue, while_break,
     def, def_argument, def_recursive, def_internal, def_ho, def_lexical_scope,
-    class_var, class_instance_var, class_method, assign_attr, class_update, class_init
+    class_var, class_instance_var, class_method, assign_attr, class_update, class_init,
+    dict_basic
 ];
