@@ -1,48 +1,32 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use syntax::*;
 use env::*;
+use object::*;
 
-trait Evaluable {
-    fn eval(&self, env: Rc<Env>) -> Rc<Value>;
-}
-
-impl Evaluable for Expr {
-    fn eval(&self, env: Rc<Env>) -> Rc<Value> {
+impl Expr {
+    fn eval(&self, env: Rc<Env>) -> Rc<PyObject> {
         match self {
             &Expr::VarExpr(ref id) => env.get(id),
-            &Expr::IntExpr(i) => Rc::new(Value::IntVal(i)),
-            &Expr::BoolExpr(b) => Rc::new(Value::BoolVal(b)),
-            &Expr::StrExpr(ref s) => Rc::new(Value::StrVal(s.clone())),
-            &Expr::NoneExpr => Rc::new(Value::NoneVal),
+            &Expr::IntExpr(i) => Rc::new(PyObject::from_i32(i)),
+            &Expr::BoolExpr(b) => Rc::new(PyObject::from_bool(b)),
+            &Expr::StrExpr(ref s) => Rc::new(PyObject::from_string(s.clone())),
+            &Expr::NoneExpr => Rc::new(PyObject::none_obj()),
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match *v1 {
-                    Value::IntVal(i1) => match *v2 {
-                        Value::IntVal(i2) => Rc::new(Value::IntVal(i1 + i2)),
-                        _ => panic!("Type error"),
-                    },
-                    _ => panic!("Type error"),
-                }
+                (v1.ob_type().tp_fun_add.unwrap())(&*v1, &*v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match *v1 {
-                    Value::IntVal(i1) => match *v2 {
-                        Value::IntVal(i2) => Rc::new(Value::BoolVal(i1 < i2)),
-                        _ => panic!("Type error"),
-                    },
-                    _ => panic!("Type error"),
-                }
+                (v1.ob_type().tp_fun_lt.unwrap())(&*v1, &*v2)
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                Rc::new(Value::BoolVal(v1 == v2))
+                (v1.ob_type().tp_fun_eq.unwrap())(&*v1, &*v2)
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -51,115 +35,92 @@ impl Evaluable for Expr {
             },
             &Expr::AttrExpr(ref e, ref ident) => {
                 let v = e.eval(Rc::clone(&env));
-                get_attr(v, ident)
+                get_attr(&v, ident).unwrap()
             },
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match *v1 {
-                    Value::DictVal(ref dict) => Rc::clone(dict.borrow().get(&v2).unwrap()),
-                    _ => panic!("Runtime Error: SubscrExpr")
-                }
+                v1.lookup(&v2).unwrap()
             },
             &Expr::DictExpr(ref pl) => {
-                let mut dict = HashMap::new();
+                let mut hmap = HashMap::new();
                 for (e1, e2) in pl {
                     let v1 = e1.eval(Rc::clone(&env));
                     let v2 = e2.eval(Rc::clone(&env));
-                    dict.insert(v1, v2);
+                    hmap.insert(v1, v2);
                 }
-                Rc::new(Value::DictVal(RefCell::new(dict)))
+                Rc::new(PyObject::from_hashmap(hmap))
             }
         }
     }
 }
 
-fn call_func(funv: Rc<Value>, args: &mut Vec<Rc<Value>>) -> Rc<Value> {
+fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
     match *funv {
-        Value::FunVal(ref funenv, ref keys, ref prog) => {
-            match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, args))) {
-                CtrlOp::Nop => Rc::new(Value::NoneVal),
+        PyObject::FunObj(ref fun) => {
+            match fun.code.exec(Rc::new(Env::new_child(&fun.env, &fun.parms, args))) {
+                CtrlOp::Nop => Rc::new(PyObject::none_obj()),
                 CtrlOp::Return(val) => val,
                 _ => panic!("Invalid control operator"),
             }
         },
-        Value::MethodVal(ref self_val, ref funenv, ref keys, ref prog) => {
-            let mut vals = vec![Rc::clone(self_val)];
+        PyObject::MethodObj(ref method) => {
+            let mut vals = vec![Rc::clone(&method.ob_self)];
             vals.append(args);
-            match prog.exec(Rc::new(Env::new_child(Rc::clone(funenv), keys, &vals))) {
-                CtrlOp::Nop => Rc::new(Value::NoneVal),
+            match method.code.exec(Rc::new(Env::new_child(&method.env, &method.parms, &vals))) {
+                CtrlOp::Nop => Rc::new(PyObject::none_obj()),
                 CtrlOp::Return(val) => val,
                 _ => panic!("Invalid control operator"),
             }
         },
-        Value::ClassVal(ref map) => {
-            let instance = create_instance(Rc::clone(&funv), map);
-            match *instance {
-                Value::InstanceVal(_, ref map) => {
-                    let init_fun_opt = get_val(map, &"__init__".to_string());
-                    match init_fun_opt {
-                        Some(init_fun) => call_func(Rc::clone(&init_fun), args),
-                        None => Rc::new(Value::NoneVal)
-                    };
-                },
-                _ => panic!("Never happenes")
-            }
+        PyObject::TypeObj(ref cls) => {
+            let dictval = Rc::new(PyDictObject::from_hashmap(HashMap::new()));
+            let instance = Rc::new(PyObject::InstObj(Rc::new(
+                PyInstObject {
+                    ob_type: Rc::clone(cls),
+                    class: Rc::clone(cls),
+                    dict: dictval,
+                })));
+            match get_attr(&instance, &"__init__".to_string()) {
+                Some(init_fun) => call_func(Rc::clone(&init_fun), args),
+                None => Rc::new(PyObject::none_obj())
+            };
             instance
-
         },
         _ => panic!("Type Error: Callable expected"),
     }
 }
 
-fn create_instance(class_val: Rc<Value>, map: &RefCell<HashMap<Id, Rc<Value>>>) -> Rc<Value> {
-    let instance = Rc::new(Value::InstanceVal(class_val, RefCell::new(HashMap::new())));
-    match *instance {
-        Value::InstanceVal(_, ref ret_map) => {
-            for (key, val) in map.borrow().iter() {
-                ret_map.borrow_mut().insert(
-                    key.clone(), instantiate_value(Rc::clone(val), &instance));
-            }
-        },
-        _ => panic!("Never happenes")
-    };
-    instance
-}
-
-fn instantiate_value(value: Rc<Value>, instance_ref: &Rc<Value>) -> Rc<Value> {
+fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject> {
     match *value {
-        Value::FunVal(ref funenv, ref params, ref prog) => {
-            let method = Value::MethodVal(Rc::clone(instance_ref),
-                                          Rc::clone(funenv),
-                                          params.clone(),
-                                          prog.clone());
-            Rc::new(method)
-        },
-        _ => Rc::clone(&value)
+        PyObject::FunObj(ref fun) => Rc::new(PyObject::MethodObj(Rc::new(
+            PyMethodObject {
+                ob_type: Rc::new(PyTypeObject::new_method()),
+                ob_self: Rc::clone(instance_ref),
+                env: Rc::clone(&fun.env),
+                parms: fun.parms.clone(),
+                code: fun.code.clone(),
+            }))),
+        _ => Rc::clone(&value),
     }
 }
 
-fn get_val(map: &RefCell<HashMap<Id, Rc<Value>>>, id: &Id) -> Option<Rc<Value>> {
-    match map.borrow().get(id) {
-        Some(v) => Some(Rc::clone(v)),
-        None => None
-    }
-}
-
-fn get_attr(value: Rc<Value>, id: &Id) -> Rc<Value> {
-    match *value {
-        Value::ClassVal(ref map) => {
-            Rc::clone(map.borrow().get(id).unwrap())
+fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
+    let keyval = Rc::new(PyObject::from_string(key.clone()));
+    match **value {
+        PyObject::TypeObj(ref typ) => match typ.tp_dict_ref() {
+            &Some(ref dict) => dict.lookup(&keyval),
+            &None => panic!("Type Error: get_attr"),
         },
-        Value::InstanceVal(ref class, ref map) => {
-            let val = get_val(map, id);
-            match val {
-                Some(ret_val) => Rc::clone(&ret_val),
-                None => {
-                    let method = instantiate_value(
-                        Rc::clone(&get_attr(Rc::clone(class), id)),
-                        &value);
-                    map.borrow_mut().insert(id.clone(), Rc::clone(&method));
-                    method
+        PyObject::InstObj(ref inst) => {
+            match inst.dict.lookup(&keyval) {
+                Some(ret_val) => Some(ret_val),
+                None => match inst.class.tp_dict_ref() {
+                    &Some(ref dict) =>  match dict.lookup(&keyval) {
+                        Some(ret_val) => Some(make_method(Rc::clone(&ret_val), &value)),
+                        None => None
+                    },
+                    &None => panic!("Type Error: get_attr")
                 }
             }
         },
@@ -167,30 +128,26 @@ fn get_attr(value: Rc<Value>, id: &Id) -> Rc<Value> {
     }
 }
 
-fn update_attr(value: Rc<Value>, id: &Id, rvalue: Rc<Value>) {
+fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
+    let keyval = Rc::new(PyObject::from_string(key));
+    let value = Rc::clone(value);
     match *value {
-        Value::ClassVal(ref map) => {
-            map.borrow_mut().insert(id.clone(), rvalue);
+        PyObject::TypeObj(ref typ) => {
+            match typ.tp_dict_ref() {
+                &Some(ref dict) => dict.update(keyval, rvalue),
+                &None => panic!("Type Error: update_attr")
+            }
         },
-        Value::InstanceVal(ref class, ref map) => {
-            map.borrow_mut().insert(id.clone(), rvalue);
+        PyObject::InstObj(ref inst) => {
+            inst.dict.update(keyval, rvalue);
         },
         _ => panic!("Type Error: update_attr")
     }
 }
 
-fn is_true_value(res: &Value) -> bool {
-    match res {
-        &Value::IntVal(i) => i != 0,
-        &Value::BoolVal(b) => b,
-        &Value::NoneVal => false,
-        _ => true,
-    }
-}
-
 pub enum CtrlOp {
     Nop,
-    Return(Rc<Value>),
+    Return(Rc<PyObject>),
     Break,
     Continue,
 }
@@ -215,20 +172,14 @@ impl Executable for SimpleStmt {
                     &Target::AttrTarget(ref lexpr, ref id) => {
                         let rv = rexpr.eval(Rc::clone(&env));
                         let lv = lexpr.eval(Rc::clone(&env));
-                        update_attr(lv, id, rv);
+                        update_attr(&lv, id.clone(), rv);
                     },
                     &Target::SubscrTarget(ref e1, ref e2) => {
                         let rv = rexpr.eval(Rc::clone(&env));
                         let v1 = e1.eval(Rc::clone(&env));
                         let v2 = e2.eval(Rc::clone(&env));
-                        match *v1 {
-                            Value::DictVal(ref dict) => dict.borrow_mut().insert(v2, rv),
-                            _ => panic!("Type Error: AssignStmt")
-                        };
+                        v1.update(v2, rv);
                     },
-                    _ => {
-                        panic!("Type Error: AssignStmt");
-                    }
                 };
                 CtrlOp::Nop
             },
@@ -238,7 +189,7 @@ impl Executable for SimpleStmt {
             &SimpleStmt::BreakStmt => CtrlOp::Break,
             &SimpleStmt::ContinueStmt => CtrlOp::Continue,
             &SimpleStmt::AssertStmt(ref expr) => {
-                if is_true_value(&expr.eval(Rc::clone(&env))) {
+                if (&expr.eval(Rc::clone(&env))).to_bool() {
                     CtrlOp::Nop
                 } else {
                     panic!("AssertionError")
@@ -252,14 +203,14 @@ impl Executable for CompoundStmt {
     fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
             &CompoundStmt::IfStmt(ref expr, ref prog_then, ref prog_else) => {
-                if is_true_value(&expr.eval(Rc::clone(&env))) {
+                if (&expr.eval(Rc::clone(&env))).to_bool() {
                     prog_then.exec(Rc::clone(&env))
                 } else {
                     prog_else.exec(Rc::clone(&env))
                 }
             },
             &CompoundStmt::WhileStmt(ref expr, ref prog) => {
-                while is_true_value(&expr.eval(Rc::clone(&env))) {
+                while (&expr.eval(Rc::clone(&env))).to_bool() {
                     match prog.exec(Rc::clone(&env)) {
                         CtrlOp::Return(e) => return CtrlOp::Return(e),
                         CtrlOp::Break => break,
@@ -269,19 +220,33 @@ impl Executable for CompoundStmt {
                 CtrlOp::Nop
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
-                Rc::clone(&env).update(
-                    id.clone(),
-                    Rc::new(Value::FunVal(Rc::clone(&env), parms.clone(), prog.clone())));
+                let funv = PyObject::FunObj(Rc::new(
+                    PyFuncObject {
+                        ob_type: Rc::new(PyTypeObject::new_function()),
+                        env: Rc::clone(&env),
+                        parms: parms.clone(),
+                        code: prog.clone(),
+                    }));
+                Rc::clone(&env).update(id.clone(), Rc::new(funv));
                 CtrlOp::Nop
             },
             &CompoundStmt::ClassStmt(ref id, ref prog) => {
-                let new_env = Rc::new(Env::new_child(Rc::clone(&env), &vec![], &vec![]));
+                let new_env = Rc::new(Env::new_child(&env, &vec![], &vec![]));
                 match prog.exec(Rc::clone(&new_env)) {
                     CtrlOp::Nop => (),
                     _ => panic!("Runtime Error: Invalid control operator")
                 }
-                env.update(id.clone(),
-                           Rc::new(Value::ClassVal(RefCell::new(new_env.raw_map()))));
+                let dictobj = PyDictObject::from_hashmap(new_env.dict());
+                let cls = PyObject::TypeObj(Rc::new(
+                    PyTypeObject {
+                        ob_type: Some(Rc::new(PyTypeObject::new_type())),
+                        tp_name: id.clone(),
+                        tp_fun_eq: None,
+                        tp_fun_add: None,
+                        tp_fun_lt: None,
+                        tp_dict: Some(Rc::new(dictobj)),
+                    }));
+                env.update(id.clone(), Rc::new(cls));
                 CtrlOp::Nop
             }
         }
