@@ -237,16 +237,11 @@ impl Executable for CompoundStmt {
                     _ => panic!("Runtime Error: Invalid control operator")
                 }
                 let dictobj = PyDictObject::from_hashmap(new_env.dict());
-                let cls = PyObject::TypeObj(Rc::new(
-                    PyTypeObject {
-                        ob_type: Some(Rc::new(PyTypeObject::new_type())),
-                        tp_name: id.clone(),
-                        tp_fun_eq: None,
-                        tp_fun_add: None,
-                        tp_fun_lt: None,
-                        tp_dict: Some(Rc::new(dictobj)),
-                    }));
-                env.update(id.clone(), Rc::new(cls));
+                let mut cls = PyTypeObject::new_type();
+                cls.ob_type = Some(Rc::new(PyTypeObject::new_type()));
+                cls.tp_name = id.clone();
+                cls.tp_dict = Some(Rc::new(dictobj));
+                env.update(id.clone(), Rc::new(PyObject::TypeObj(Rc::new(cls))));
                 CtrlOp::Nop
             }
         }

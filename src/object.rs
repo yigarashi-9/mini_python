@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::rc::Rc;
 
 use env::Env;
@@ -82,13 +83,7 @@ impl Eq for PyObject {}
 
 impl Hash for PyObject {
     fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        match self {
-            &PyObject::LongObj(ref obj) => obj.n.hash(hasher),
-            &PyObject::BoolObj(ref obj) => obj.b.hash(hasher),
-            &PyObject::StrObj(ref obj) => obj.s.hash(hasher),
-            &PyObject::DictObj(_) => panic!("Unhashable: DictVal"),
-            _ => (self as *const PyObject).hash(hasher)
-        }
+        hasher.write_u64(self.ob_type().tp_hash.expect("Type Error: Unhashbable")(self))
     }
 }
 
@@ -200,10 +195,12 @@ impl PyDictObject {
 }
 
 pub type PyBinaryOp = fn(&PyObject, &PyObject) -> Rc<PyObject>;
+pub type PyHashFunc = fn(&PyObject) -> u64;
 
 pub struct PyTypeObject {
     pub ob_type: Option<Rc<PyTypeObject>>,
     pub tp_name: String,
+    pub tp_hash: Option<PyHashFunc>,
     pub tp_fun_eq: Option<PyBinaryOp>,
     pub tp_fun_add: Option<PyBinaryOp>,
     pub tp_fun_lt: Option<PyBinaryOp>,
@@ -260,11 +257,45 @@ fn lt_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
+fn default_hash(obj: &PyObject) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    (obj as *const PyObject).hash(&mut hasher);
+    hasher.finish()
+}
+
+fn int_hash(obj: &PyObject) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    match obj {
+        &PyObject::LongObj(ref obj) => obj.n.hash(&mut hasher),
+        _ => panic!("Type Error: int_hash")
+    };
+    hasher.finish()
+}
+
+fn bool_hash(obj: &PyObject) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    match obj {
+        &PyObject::BoolObj(ref obj) => obj.b.hash(&mut hasher),
+        _ => panic!("Type Error: bool_hash")
+    };
+    hasher.finish()
+}
+
+fn str_hash(obj: &PyObject) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    match obj {
+        &PyObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
+        _ => panic!("Type Error: str_hash")
+    };
+    hasher.finish()
+}
+
 impl PyTypeObject {
     pub fn new_type() -> PyTypeObject {
         PyTypeObject {
             ob_type: None,
             tp_name: "type".to_string(),
+            tp_hash: Some(default_hash),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -276,6 +307,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "int".to_string(),
+            tp_hash: Some(int_hash),
             tp_fun_eq: Some(eq_long_long),
             tp_fun_add: Some(add_long_long),
             tp_fun_lt: Some(lt_long_long),
@@ -287,6 +319,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "str".to_string(),
+            tp_hash: Some(str_hash),
             tp_fun_eq: Some(eq_str_str),
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -298,6 +331,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "None".to_string(),
+            tp_hash: Some(default_hash),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -309,6 +343,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "function".to_string(),
+            tp_hash: Some(default_hash),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -320,6 +355,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "method".to_string(),
+            tp_hash: Some(default_hash),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -331,6 +367,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "dict".to_string(),
+            tp_hash: None,
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
