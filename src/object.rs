@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use env::Env;
 use syntax::{Id, Program};
+use pyhashmap::PyHashMap;
 
 pub enum PyObject {
     LongObj(Rc<PyLongObject>),
@@ -120,7 +121,7 @@ pub struct PyBoolObject {
 impl PyBoolObject {
     pub fn from_bool(raw_bool: bool) -> PyBoolObject {
         PyBoolObject {
-            ob_type: Rc::new(PyTypeObject::new_int()),
+            ob_type: Rc::new(PyTypeObject::new_bool()),
             b: raw_bool,
         }
     }
@@ -167,7 +168,7 @@ pub struct PyMethodObject {
 
 pub struct PyDictObject {
     pub ob_type: Rc<PyTypeObject>,
-    pub dict: RefCell<HashMap<Rc<PyObject>, Rc<PyObject>>>
+    pub dict: RefCell<PyHashMap>,
 }
 
 impl PyDictObject {
@@ -176,9 +177,13 @@ impl PyDictObject {
     }
 
     pub fn from_hashmap(raw_hashmap: HashMap<Rc<PyObject>, Rc<PyObject>>) -> PyDictObject {
+        let mut pyhashmap = PyHashMap::new();
+        for (key, val) in raw_hashmap.iter() {
+            pyhashmap.insert(Rc::clone(key), Rc::clone(val))
+        };
         PyDictObject {
             ob_type: Rc::new(PyTypeObject::new_dict()),
-            dict: RefCell::new(raw_hashmap),
+            dict: RefCell::new(pyhashmap),
         }
     }
 
@@ -217,6 +222,19 @@ fn eq_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
             }
         },
         _ => panic!("Type Error: eq_long_long"),
+    }
+}
+
+fn eq_bool_bool(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
+    match lv {
+        &PyObject::BoolObj(ref l_obj) => {
+            match rv {
+                &PyObject::BoolObj(ref r_obj) =>
+                    Rc::new(PyObject::from_bool(l_obj.b == r_obj.b)),
+                _ => panic!("Type Error: eq_bool_bool"),
+            }
+        },
+        _ => panic!("Type Error: eq_bool_bool"),
     }
 }
 
@@ -311,6 +329,18 @@ impl PyTypeObject {
             tp_fun_eq: Some(eq_long_long),
             tp_fun_add: Some(add_long_long),
             tp_fun_lt: Some(lt_long_long),
+            tp_dict: None,
+        }
+    }
+
+    pub fn new_bool() -> PyTypeObject {
+        PyTypeObject {
+            ob_type: Some(Rc::new(PyTypeObject::new_type())),
+            tp_name: "bool".to_string(),
+            tp_hash: Some(bool_hash),
+            tp_fun_eq: Some(eq_bool_bool),
+            tp_fun_add: None,
+            tp_fun_lt: None,
             tp_dict: None,
         }
     }
