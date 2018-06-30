@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use syntax::*;
@@ -16,17 +15,17 @@ impl Expr {
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_add.unwrap())(&*v1, &*v2)
+                (v1.ob_type().tp_fun_add.as_ref().unwrap())(v1, v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_lt.unwrap())(&*v1, &*v2)
+                (v1.ob_type().tp_fun_lt.as_ref().unwrap())(v1, v2)
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_eq.unwrap())(&*v1, &*v2)
+                (v1.ob_type().tp_fun_eq.as_ref().unwrap())(v1, v2)
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -43,13 +42,13 @@ impl Expr {
                 v1.lookup(&v2).unwrap()
             },
             &Expr::DictExpr(ref pl) => {
-                let mut hmap = HashMap::new();
+                let mut dictobj = PyDictObject::new();
                 for (e1, e2) in pl {
                     let v1 = e1.eval(Rc::clone(&env));
                     let v2 = e2.eval(Rc::clone(&env));
-                    hmap.insert(v1, v2);
+                    dictobj.update(v1, v2);
                 }
-                Rc::new(PyObject::from_hashmap(hmap))
+                Rc::new(PyObject::DictObj(Rc::new(dictobj)))
             }
         }
     }
@@ -74,7 +73,7 @@ fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
             }
         },
         PyObject::TypeObj(ref cls) => {
-            let dictval = Rc::new(PyDictObject::from_hashmap(HashMap::new()));
+            let dictval = Rc::new(PyDictObject::new());
             let instance = Rc::new(PyObject::InstObj(Rc::new(
                 PyInstObject {
                     ob_type: Rc::clone(cls),
@@ -144,6 +143,17 @@ fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
         _ => panic!("Type Error: update_attr")
     }
 }
+
+pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
+    Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
+        Box::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
+    }
+
+pub fn get_wrapped_binop(dict: Rc<PyDictObject>, s: &str) ->
+    Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
+        dict.lookup(&Rc::new(PyObject::from_str(s))).map(binop_from_pyobj)
+    }
+
 
 pub enum CtrlOp {
     Nop,
@@ -236,11 +246,15 @@ impl Executable for CompoundStmt {
                     CtrlOp::Nop => (),
                     _ => panic!("Runtime Error: Invalid control operator")
                 }
-                let dictobj = PyDictObject::from_hashmap(new_env.dict());
+                let dictobj = Rc::new(new_env.dictobj());
                 let mut cls = PyTypeObject::new_type();
                 cls.ob_type = Some(Rc::new(PyTypeObject::new_type()));
                 cls.tp_name = id.clone();
-                cls.tp_dict = Some(Rc::new(dictobj));
+                // cls.tp_hash = dictobj.lookup(Rc::new(PyObject::from_str("__hash__")));
+                cls.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
+                cls.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
+                cls.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
+                cls.tp_dict = Some(Rc::clone(&dictobj));
                 env.update(id.clone(), Rc::new(PyObject::TypeObj(Rc::new(cls))));
                 CtrlOp::Nop
             }

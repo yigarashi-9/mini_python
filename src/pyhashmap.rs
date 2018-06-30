@@ -1,5 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 use std::rc::Rc;
 
 use object::*;
@@ -15,7 +13,7 @@ impl PyHashMap {
 
     pub fn get(&self, key: &Rc<PyObject>) -> Option<&Rc<PyObject>> {
         self.table.iter().find_map(|ref tuple| {
-            if tuple.0 == key.ob_type().tp_hash.unwrap()(&**key) {
+            if tuple.0 == key.ob_type().tp_hash.as_ref().unwrap()(Rc::clone(key)) {
                 Some(&tuple.2)
             } else {
                 None
@@ -24,7 +22,7 @@ impl PyHashMap {
     }
 
     pub fn insert(&mut self, key: Rc<PyObject>, value: Rc<PyObject>) {
-        let hash = key.ob_type().tp_hash.unwrap()(&*key);
+        let hash = key.ob_type().tp_hash.as_ref().unwrap()(Rc::clone(&key));
         let new_entry = [(hash, Rc::clone(&key), Rc::clone(&value))];
         let i = self.table.iter().position(|ref tuple| tuple.0 == hash);
         match i {

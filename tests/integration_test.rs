@@ -55,5 +55,6 @@ test_cases![
     while_normal, while_continue, while_break,
     def, def_argument, def_recursive, def_internal, def_ho, def_lexical_scope,
     class_var, class_instance_var, class_method, assign_attr, class_update, class_init,
-    dict_basic
+    dict_basic,
+    meta_add
 ];

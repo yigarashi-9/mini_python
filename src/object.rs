@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::rc::Rc;
 
@@ -47,16 +46,16 @@ impl PyObject {
         PyObject::BoolObj(Rc::new(PyBoolObject::from_bool(raw_bool)))
     }
 
+    pub fn from_str(s: &str) -> PyObject {
+        PyObject::from_string(s.to_string())
+    }
+
     pub fn from_string(raw_string: String) -> PyObject {
         PyObject::StrObj(Rc::new(PyStringObject::from_string(raw_string)))
     }
 
     pub fn none_obj() -> PyObject {
         PyObject::NoneObj(Rc::new(PyNoneObject { ob_type: Rc::new(PyTypeObject::new_none()) }))
-    }
-
-    pub fn from_hashmap(raw_hashmap: HashMap<Rc<PyObject>, Rc<PyObject>>) -> PyObject {
-        PyObject::DictObj(Rc::new(PyDictObject::from_hashmap(raw_hashmap)))
     }
 
     pub fn lookup(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
@@ -74,26 +73,12 @@ impl PyObject {
     }
 }
 
-impl PartialEq for PyObject {
-    fn eq(&self, other: &PyObject) -> bool {
-        self.ob_type().tp_fun_eq.expect("Type Error: No __eq__")(self, other).to_bool()
-    }
-}
-
-impl Eq for PyObject {}
-
-impl Hash for PyObject {
-    fn hash<H>(&self, hasher: &mut H) where H: Hasher {
-        hasher.write_u64(self.ob_type().tp_hash.expect("Type Error: Unhashbable")(self))
-    }
-}
-
 impl PyObject {
     pub fn to_bool(&self) -> bool {
         match self {
             PyObject::LongObj(ref obj) => obj.n != 0,
             PyObject::BoolObj(ref obj) => obj.b,
-            PyObject::NoneObj(ref obj) => false,
+            PyObject::NoneObj(ref _obj) => false,
             _ => true,
         }
     }
@@ -173,17 +158,9 @@ pub struct PyDictObject {
 
 impl PyDictObject {
     pub fn new() -> PyDictObject {
-        PyDictObject::from_hashmap(HashMap::new())
-    }
-
-    pub fn from_hashmap(raw_hashmap: HashMap<Rc<PyObject>, Rc<PyObject>>) -> PyDictObject {
-        let mut pyhashmap = PyHashMap::new();
-        for (key, val) in raw_hashmap.iter() {
-            pyhashmap.insert(Rc::clone(key), Rc::clone(val))
-        };
         PyDictObject {
             ob_type: Rc::new(PyTypeObject::new_dict()),
-            dict: RefCell::new(pyhashmap),
+            dict: RefCell::new(PyHashMap::new()),
         }
     }
 
@@ -199,24 +176,21 @@ impl PyDictObject {
     }
 }
 
-pub type PyBinaryOp = fn(&PyObject, &PyObject) -> Rc<PyObject>;
-pub type PyHashFunc = fn(&PyObject) -> u64;
-
 pub struct PyTypeObject {
     pub ob_type: Option<Rc<PyTypeObject>>,
     pub tp_name: String,
-    pub tp_hash: Option<PyHashFunc>,
-    pub tp_fun_eq: Option<PyBinaryOp>,
-    pub tp_fun_add: Option<PyBinaryOp>,
-    pub tp_fun_lt: Option<PyBinaryOp>,
+    pub tp_hash: Option<Box<dyn Fn(Rc<PyObject>) -> u64>>,
+    pub tp_fun_eq: Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>>,
+    pub tp_fun_add: Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>>,
+    pub tp_fun_lt: Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>>,
     pub tp_dict: Option<Rc<PyDictObject>>,
 }
 
-fn eq_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
-    match lv {
-        &PyObject::LongObj(ref l_obj) => {
-            match rv {
-                &PyObject::LongObj(ref r_obj) =>
+fn eq_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::LongObj(ref l_obj) => {
+            match *rv {
+                PyObject::LongObj(ref r_obj) =>
                     Rc::new(PyObject::from_bool(l_obj.n == r_obj.n)),
                 _ => panic!("Type Error: eq_long_long"),
             }
@@ -225,11 +199,11 @@ fn eq_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
-fn eq_bool_bool(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
-    match lv {
-        &PyObject::BoolObj(ref l_obj) => {
-            match rv {
-                &PyObject::BoolObj(ref r_obj) =>
+fn eq_bool_bool(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::BoolObj(ref l_obj) => {
+            match *rv {
+                PyObject::BoolObj(ref r_obj) =>
                     Rc::new(PyObject::from_bool(l_obj.b == r_obj.b)),
                 _ => panic!("Type Error: eq_bool_bool"),
             }
@@ -238,11 +212,11 @@ fn eq_bool_bool(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
-fn eq_str_str(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
-    match lv {
-        &PyObject::StrObj(ref l_obj) => {
-            match rv {
-                &PyObject::StrObj(ref r_obj) =>
+fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::StrObj(ref l_obj) => {
+            match *rv {
+                PyObject::StrObj(ref r_obj) =>
                     Rc::new(PyObject::from_bool(l_obj.s == r_obj.s)),
                 _ => panic!("Type Error: eq_str_str"),
             }
@@ -251,11 +225,11 @@ fn eq_str_str(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
-fn add_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
-    match lv {
-        &PyObject::LongObj(ref l_obj) => {
-            match rv {
-                &PyObject::LongObj(ref r_obj) => Rc::new(PyObject::from_i32(l_obj.n + r_obj.n)),
+fn add_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::LongObj(ref l_obj) => {
+            match *rv {
+                PyObject::LongObj(ref r_obj) => Rc::new(PyObject::from_i32(l_obj.n + r_obj.n)),
                 _ => panic!("Type Error: add_long_long"),
             }
         },
@@ -263,11 +237,11 @@ fn add_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
-fn lt_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
-    match lv {
-        &PyObject::LongObj(ref l_obj) => {
-            match rv {
-                &PyObject::LongObj(ref r_obj) => Rc::new(PyObject::from_bool(l_obj.n < r_obj.n)),
+fn lt_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::LongObj(ref l_obj) => {
+            match *rv {
+                PyObject::LongObj(ref r_obj) => Rc::new(PyObject::from_bool(l_obj.n < r_obj.n)),
                 _ => panic!("Type Error: lt_long_long"),
             }
         },
@@ -275,34 +249,34 @@ fn lt_long_long(lv: &PyObject, rv: &PyObject) -> Rc<PyObject> {
     }
 }
 
-fn default_hash(obj: &PyObject) -> u64 {
+fn default_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    (obj as *const PyObject).hash(&mut hasher);
+    (&*obj as *const PyObject).hash(&mut hasher);
     hasher.finish()
 }
 
-fn int_hash(obj: &PyObject) -> u64 {
+fn int_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    match obj {
-        &PyObject::LongObj(ref obj) => obj.n.hash(&mut hasher),
+    match *obj {
+        PyObject::LongObj(ref obj) => obj.n.hash(&mut hasher),
         _ => panic!("Type Error: int_hash")
     };
     hasher.finish()
 }
 
-fn bool_hash(obj: &PyObject) -> u64 {
+fn bool_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    match obj {
-        &PyObject::BoolObj(ref obj) => obj.b.hash(&mut hasher),
+    match *obj {
+        PyObject::BoolObj(ref obj) => obj.b.hash(&mut hasher),
         _ => panic!("Type Error: bool_hash")
     };
     hasher.finish()
 }
 
-fn str_hash(obj: &PyObject) -> u64 {
+fn str_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    match obj {
-        &PyObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
+    match *obj {
+        PyObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
         _ => panic!("Type Error: str_hash")
     };
     hasher.finish()
@@ -313,7 +287,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: None,
             tp_name: "type".to_string(),
-            tp_hash: Some(default_hash),
+            tp_hash: Some(Box::new(default_hash)),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -325,10 +299,10 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "int".to_string(),
-            tp_hash: Some(int_hash),
-            tp_fun_eq: Some(eq_long_long),
-            tp_fun_add: Some(add_long_long),
-            tp_fun_lt: Some(lt_long_long),
+            tp_hash: Some(Box::new(int_hash)),
+            tp_fun_eq: Some(Box::new(eq_long_long)),
+            tp_fun_add: Some(Box::new(add_long_long)),
+            tp_fun_lt: Some(Box::new(lt_long_long)),
             tp_dict: None,
         }
     }
@@ -337,8 +311,8 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "bool".to_string(),
-            tp_hash: Some(bool_hash),
-            tp_fun_eq: Some(eq_bool_bool),
+            tp_hash: Some(Box::new(bool_hash)),
+            tp_fun_eq: Some(Box::new(eq_bool_bool)),
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_dict: None,
@@ -349,8 +323,8 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "str".to_string(),
-            tp_hash: Some(str_hash),
-            tp_fun_eq: Some(eq_str_str),
+            tp_hash: Some(Box::new(str_hash)),
+            tp_fun_eq: Some(Box::new(eq_str_str)),
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_dict: None,
@@ -361,7 +335,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "None".to_string(),
-            tp_hash: Some(default_hash),
+            tp_hash: Some(Box::new(default_hash)),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -373,7 +347,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "function".to_string(),
-            tp_hash: Some(default_hash),
+            tp_hash: Some(Box::new(default_hash)),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -385,7 +359,7 @@ impl PyTypeObject {
         PyTypeObject {
             ob_type: Some(Rc::new(PyTypeObject::new_type())),
             tp_name: "method".to_string(),
-            tp_hash: Some(default_hash),
+            tp_hash: Some(Box::new(default_hash)),
             tp_fun_eq: None,
             tp_fun_add: None,
             tp_fun_lt: None,
@@ -405,7 +379,13 @@ impl PyTypeObject {
         }
     }
 
+    pub fn tp_fun_eq_ref(&self) ->
+        &Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
+        &self.tp_fun_eq
+    }
+
     pub fn tp_dict_ref(&self) -> &Option<Rc<PyDictObject>> {
         &self.tp_dict
     }
+
 }
