@@ -2,6 +2,22 @@ use std::iter::Peekable;
 use std::str::Chars;
 use token::Token;
 
+pub struct LexingError {
+    line: usize,
+    row: usize,
+    msg: String,
+}
+
+impl LexingError {
+    fn new(line: usize, row: usize, msg: String) -> LexingError {
+        LexingError { line: line, row: row, msg: msg }
+    }
+
+    pub fn to_string(self) -> String {
+        format!("Lexing Error: line {}, row {}, {}", self.line, self.row, self.msg)
+    }
+}
+
 fn symbol_to_token(ch: char) -> Token {
     match ch {
         '+' => Token::Plus,
@@ -15,7 +31,6 @@ fn symbol_to_token(ch: char) -> Token {
         ':' => Token::Colon,
         ',' => Token::Comma,
         '.' => Token::Dot,
-
         _   => panic!("Invalid symbol"),
     }
 }
@@ -83,7 +98,22 @@ impl <'a>Lexer<'a> {
                 is_line_head: true, tokens: vec![] }
     }
 
-    fn calc_indent(&mut self, indent_level: usize) -> () {
+    fn next(&mut self) -> Option<char> {
+        match self.it.next() {
+            Some('\n') => {
+                self.line += 1;
+                self.row = 0;
+                Some('\n')
+            },
+            Some(c) => {
+                self.row += 1;
+                Some(c)
+            },
+            None => None,
+        }
+    }
+
+    fn calc_indent(&mut self, indent_level: usize) -> Result<(), LexingError> {
         let mut last_indent_level = *(self.stack.last().unwrap());
         if indent_level > last_indent_level {
             self.stack.push(indent_level);
@@ -96,9 +126,19 @@ impl <'a>Lexer<'a> {
                 if indent_level == last_indent_level {
                     break;
                 } else if indent_level > last_indent_level {
-                    panic!("Invalid indentation");
+                    return Err(self.error("Invalid indentation".to_string()))
                 }
             }
+        };
+        Ok(())
+    }
+
+    fn consume(&mut self, c1: char) -> Option<char> {
+        match self.next() {
+            Some(c2) if c1 == c2 => {
+                Some(c1)
+            },
+            _ => None,
         }
     }
 
@@ -107,16 +147,19 @@ impl <'a>Lexer<'a> {
         let mut v: Vec<char> = vec![];
         while let Some(&ch) = self.it.peek() {
             if f(ch) {
-                self.it.next(); v.push(ch)
+                self.next(); v.push(ch)
             } else {
                 break;
             }
         }
         v
     }
+    fn error(&self, s: String) -> LexingError {
+        LexingError::new(self.line, self.row, s)
+    }
 }
 
-pub fn tokenize(s: String) -> Vec<Token> {
+pub fn tokenize(s: String) -> Result<Vec<Token>, LexingError> {
     let mut lexer = Lexer::new(&s);
     loop {
         // consume blank lines
@@ -124,11 +167,11 @@ pub fn tokenize(s: String) -> Vec<Token> {
             let indent_level = lexer.consume_while(is_whitespace).len();
             match lexer.it.peek() {
                 Some('\n') => {
-                    lexer.it.next();
+                    lexer.next();
                     continue
                 },
                 Some(_) => {
-                    lexer.calc_indent(indent_level);
+                    try!(lexer.calc_indent(indent_level));
                     lexer.is_line_head = false;
                 },
                 _ => break,
@@ -147,37 +190,37 @@ pub fn tokenize(s: String) -> Vec<Token> {
                 lexer.tokens.push(Token::Int(num.parse::<i32>().unwrap()));
             },
             '\'' => {
-                lexer.it.next();
+                lexer.next();
                 let s: String = lexer.consume_while(is_not_quote).into_iter().collect();
                 lexer.tokens.push(Token::Str(s));
-                lexer.it.next();
+                try!(lexer.consume('\'').ok_or(lexer.error("\' expected".to_string())));
             },
             '"' => {
-                lexer.it.next();
+                lexer.next();
                 let s: String = lexer.consume_while(is_not_dquote).into_iter().collect();
                 lexer.tokens.push(Token::Str(s));
-                lexer.it.next();
+                try!(lexer.consume('"').ok_or(lexer.error("\" expected".to_string())));
             },
             '+' | '<' | '(' | ')' | '[' | ']' | '{' | '}' | ':' | ',' | '.' => {
-                let nch = lexer.it.next().unwrap();
+                let nch = lexer.next().unwrap();
                 lexer.tokens.push(symbol_to_token(nch))
             },
             '=' => {
-                lexer.it.next();
+                lexer.next();
                 if *lexer.it.peek().unwrap() != '=' {
                     lexer.tokens.push(Token::Eq)
                 } else {
-                    lexer.it.next();
+                    lexer.next();
                     lexer.tokens.push(Token::EqEq)
                 }
             },
             '\n' => {
-                lexer.it.next();
+                lexer.next();
                 lexer.tokens.push(Token::NewLine);
                 lexer.is_line_head = true;
             }
             ch if is_alphabet(ch) => {
-                let nch = lexer.it.next().unwrap();
+                let nch = lexer.next().unwrap();
                 let mut id_vec = lexer.consume_while(is_alphanumeric);
                 id_vec.insert(0, nch);
                 lexer.tokens.push(ident_to_token(id_vec.into_iter().collect()));
@@ -185,7 +228,7 @@ pub fn tokenize(s: String) -> Vec<Token> {
             ch if is_whitespace(ch) => {
                 lexer.consume_while(is_whitespace);
             }
-            _ => panic!("Invalid char"),
+            _ => return Err(lexer.error(format!("Invalid character {} used", ch)))
         }
     };
 
@@ -197,7 +240,7 @@ pub fn tokenize(s: String) -> Vec<Token> {
     }
 
     lexer.tokens.push(Token::EOF);
-    lexer.tokens
+    Ok(lexer.tokens)
 }
 
 pub fn print_tokens(tokens: &Vec<Token>) {

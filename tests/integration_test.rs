@@ -11,11 +11,15 @@ use core::env::Env;
 use core::eval::*;
 
 fn run_prog_string(prog: String) {
-    let tokens = tokenize(prog);
-    let program = tokens.into_iter().peekable().parse();
-    match program.exec(Rc::new(Env::new())) {
-        CtrlOp::Nop => (),
-        _ => panic!("InvalidCtrlOp")
+    match tokenize(prog) {
+        Ok(tokens) => {
+            let program = tokens.into_iter().peekable().parse();
+            match program.exec(Rc::new(Env::new())) {
+                CtrlOp::Nop => (),
+                _ => panic!("InvalidCtrlOp")
+            }
+        },
+        Err(err) => panic!(err.to_string()),
     }
 }
 
