@@ -5,7 +5,7 @@ authors = ["yu-i9 <yuu.igarashi.9@gmail.com>"]
 
 [lib]
 name = "core"
-path = "src/core.rs"
+path = "src/core/mod.rs"
 
 [[bin]]
 name = "minpy"

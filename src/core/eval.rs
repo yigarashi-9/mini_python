@@ -2,7 +2,13 @@ use std::rc::Rc;
 
 use syntax::*;
 use env::*;
-use object::*;
+
+use object::object::*;
+use object::dictobj::*;
+use object::typeobj::*;
+use object::methodobj::*;
+use object::instobj::*;
+use object::funobj::*;
 
 impl Expr {
     fn eval(&self, env: Rc<Env>) -> Rc<PyObject> {
@@ -42,13 +48,13 @@ impl Expr {
                 v1.lookup(&v2).unwrap()
             },
             &Expr::DictExpr(ref pl) => {
-                let mut dictobj = PyDictObject::new();
+                let mut dictobj = PyObject::new_dict();
                 for (e1, e2) in pl {
                     let v1 = e1.eval(Rc::clone(&env));
                     let v2 = e2.eval(Rc::clone(&env));
                     dictobj.update(v1, v2);
                 }
-                Rc::new(PyObject::DictObj(Rc::new(dictobj)))
+                Rc::new(dictobj)
             }
         }
     }

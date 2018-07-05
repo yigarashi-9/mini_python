@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use object::*;
+use object::object::PyObject;
 
 pub struct PyHashMap {
     table: Vec<(u64, Rc<PyObject>, Rc<PyObject>)>,

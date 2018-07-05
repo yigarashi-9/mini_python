@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use object::{PyObject, PyDictObject};
+use object::object::PyObject;
+use object::dictobj::PyDictObject;
 use syntax::Id;
 
 pub struct Env {
