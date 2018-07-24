@@ -19,6 +19,19 @@ impl PyStringObject {
     }
 }
 
+fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+    match *lv {
+        PyObject::StrObj(ref l_obj) => {
+            match *rv {
+                PyObject::StrObj(ref r_obj) =>
+                    Rc::new(PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s))),
+                _ => panic!("Type Error: add_str_str"),
+            }
+        },
+        _ => panic!("Type Error: add_str_str"),
+    }
+}
+
 fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match *lv {
         PyObject::StrObj(ref l_obj) => {
@@ -47,7 +60,7 @@ pub fn new_str_type_object() -> PyTypeObject {
         tp_name: "str".to_string(),
         tp_hash: Some(Box::new(str_hash)),
         tp_fun_eq: Some(Box::new(eq_str_str)),
-        tp_fun_add: None,
+        tp_fun_add: Some(Box::new(add_str_str)),
         tp_fun_lt: None,
         tp_dict: None,
     }
