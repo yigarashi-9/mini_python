@@ -78,13 +78,26 @@ impl PyObject {
             _ => panic!("Type Error: PyObject update")
         }
     }
+}
 
-    pub fn to_bool(&self) -> bool {
-        match self {
-            PyObject::LongObj(ref obj) => obj.n != 0,
-            PyObject::BoolObj(ref obj) => obj.b,
-            PyObject::NoneObj(ref _obj) => false,
-            _ => true,
+pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
+    match Rc::clone(&v).ob_type().tp_bool.as_ref() {
+        Some(ref fun) => {
+            match *fun(Rc::clone(&v)) {
+                PyObject::BoolObj(ref obj) => obj.b,
+                _ => panic!("Type Error: pyobj_is_bool")
+            }
+        },
+        None => {
+            match Rc::clone(&v).ob_type().tp_len.as_ref() {
+                Some(ref fun) => {
+                    match *fun(Rc::clone(&v)) {
+                        PyObject::LongObj(ref obj) => obj.n > 0,
+                        _ => panic!("Type Error: pyobj_is_bool")
+                    }
+                },
+                None => panic!("Type Error: pyobj_is_bool")
+            }
         }
     }
 }

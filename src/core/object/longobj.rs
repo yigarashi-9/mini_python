@@ -60,9 +60,16 @@ fn long_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
     match *obj {
         PyObject::LongObj(ref obj) => obj.n.hash(&mut hasher),
-        _ => panic!("Type Error: int_hash")
+        _ => panic!("Type Error: long_hash")
     };
     hasher.finish()
+}
+
+fn long_bool(v: Rc<PyObject>) -> Rc<PyObject> {
+    match *v {
+        PyObject::LongObj(ref obj) => Rc::new(PyObject::from_bool(obj.n > 0)),
+        _ => panic!("Type Error: long_bool")
+    }
 }
 
 pub fn new_long_type_object() -> PyTypeObject {
@@ -70,9 +77,11 @@ pub fn new_long_type_object() -> PyTypeObject {
         ob_type: Some(Rc::new(PyTypeObject::new_type())),
         tp_name: "int".to_string(),
         tp_hash: Some(Box::new(long_hash)),
+        tp_bool: Some(Box::new(long_bool)),
         tp_fun_eq: Some(Box::new(eq_long_long)),
         tp_fun_add: Some(Box::new(add_long_long)),
         tp_fun_lt: Some(Box::new(lt_long_long)),
+        tp_len: None,
         tp_dict: None,
     }
 }

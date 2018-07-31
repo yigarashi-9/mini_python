@@ -150,6 +150,16 @@ fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     }
 }
 
+pub fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
+    Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>> {
+        Box::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
+    }
+
+pub fn get_wrapped_unaryop(dict: Rc<PyDictObject>, s: &str) ->
+    Option<Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
+        dict.lookup(&Rc::new(PyObject::from_str(s))).map(unaryop_from_pyobj)
+    }
+
 pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
     Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
         Box::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
@@ -205,7 +215,7 @@ impl Executable for SimpleStmt {
             &SimpleStmt::BreakStmt => CtrlOp::Break,
             &SimpleStmt::ContinueStmt => CtrlOp::Continue,
             &SimpleStmt::AssertStmt(ref expr) => {
-                if (&expr.eval(Rc::clone(&env))).to_bool() {
+                if pyobj_is_bool(expr.eval(Rc::clone(&env))) {
                     CtrlOp::Nop
                 } else {
                     panic!("AssertionError")
@@ -219,14 +229,14 @@ impl Executable for CompoundStmt {
     fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
             &CompoundStmt::IfStmt(ref expr, ref prog_then, ref prog_else) => {
-                if (&expr.eval(Rc::clone(&env))).to_bool() {
+                if pyobj_is_bool(expr.eval(Rc::clone(&env))) {
                     prog_then.exec(Rc::clone(&env))
                 } else {
                     prog_else.exec(Rc::clone(&env))
                 }
             },
             &CompoundStmt::WhileStmt(ref expr, ref prog) => {
-                while (&expr.eval(Rc::clone(&env))).to_bool() {
+                while pyobj_is_bool(expr.eval(Rc::clone(&env))) {
                     match prog.exec(Rc::clone(&env)) {
                         CtrlOp::Return(e) => return CtrlOp::Return(e),
                         CtrlOp::Break => break,
@@ -257,9 +267,11 @@ impl Executable for CompoundStmt {
                 cls.ob_type = Some(Rc::new(PyTypeObject::new_type()));
                 cls.tp_name = id.clone();
                 // cls.tp_hash = dictobj.lookup(Rc::new(PyObject::from_str("__hash__")));
+                cls.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
                 cls.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
                 cls.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
                 cls.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
+                cls.tp_len = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__");
                 cls.tp_dict = Some(Rc::clone(&dictobj));
                 env.update(id.clone(), Rc::new(PyObject::TypeObj(Rc::new(cls))));
                 CtrlOp::Nop

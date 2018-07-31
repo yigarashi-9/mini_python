@@ -30,14 +30,23 @@ impl PyDictObject {
     }
 }
 
+fn dict_len(v: Rc<PyObject>) -> Rc<PyObject> {
+    match *v {
+        PyObject::DictObj(ref obj) => obj.dict.borrow().len(),
+        _ => panic!("TypeError: dict_len")
+    }
+}
+
 pub fn new_dict_type_object() -> PyTypeObject {
     PyTypeObject {
         ob_type: Some(Rc::new(PyTypeObject::new_type())),
         tp_name: "dict".to_string(),
         tp_hash: None,
+        tp_bool: None,
         tp_fun_eq: None,
         tp_fun_add: None,
         tp_fun_lt: None,
+        tp_len: Some(Box::new(dict_len)),
         tp_dict: None,
     }
 }

@@ -30,4 +30,8 @@ impl PyHashMap {
             None => { self.table.push((hash, key, value)) },
         };
     }
+
+    pub fn len(&self) -> Rc<PyObject> {
+        Rc::new(PyObject::from_i32(self.table.len() as i32))
+    }
 }

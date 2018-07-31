@@ -19,6 +19,10 @@ impl PyBoolObject {
     }
 }
 
+fn bool_bool(v: Rc<PyObject>) -> Rc<PyObject> {
+    v
+}
+
 fn eq_bool_bool(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match *lv {
         PyObject::BoolObj(ref l_obj) => {
@@ -46,9 +50,11 @@ pub fn new_bool_type_object() -> PyTypeObject {
         ob_type: Some(Rc::new(PyTypeObject::new_type())),
         tp_name: "bool".to_string(),
         tp_hash: Some(Box::new(bool_hash)),
+        tp_bool: Some(Box::new(bool_bool)),
         tp_fun_eq: Some(Box::new(eq_bool_bool)),
         tp_fun_add: None,
         tp_fun_lt: None,
+        tp_len: None,
         tp_dict: None,
     }
 }

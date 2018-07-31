@@ -54,14 +54,23 @@ fn str_hash(obj: Rc<PyObject>) -> u64 {
     hasher.finish()
 }
 
+fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
+    match *v {
+        PyObject::StrObj(ref obj) => Rc::new(PyObject::from_i32(obj.s.len() as i32)),
+        _ => panic!("Type Error: str_len")
+    }
+}
+
 pub fn new_str_type_object() -> PyTypeObject {
     PyTypeObject {
         ob_type: Some(Rc::new(PyTypeObject::new_type())),
         tp_name: "str".to_string(),
         tp_hash: Some(Box::new(str_hash)),
+        tp_bool: None,
         tp_fun_eq: Some(Box::new(eq_str_str)),
         tp_fun_add: Some(Box::new(add_str_str)),
         tp_fun_lt: None,
+        tp_len: Some(Box::new(str_len)),
         tp_dict: None,
     }
 }

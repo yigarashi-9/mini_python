@@ -18,9 +18,11 @@ pub fn new_method_type_object() -> PyTypeObject {
         ob_type: Some(Rc::new(PyTypeObject::new_type())),
         tp_name: "method".to_string(),
         tp_hash: Some(Box::new(default_hash)),
+        tp_bool: None,
         tp_fun_eq: None,
         tp_fun_add: None,
         tp_fun_lt: None,
+        tp_len: None,
         tp_dict: None,
     }
 }
