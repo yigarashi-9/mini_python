@@ -45,7 +45,19 @@ impl Expr {
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                v1.lookup(&v2).unwrap()
+                match *v1 {
+                    PyObject::ListObj(ref obj) => {
+                        obj.getitem_index(&v2).unwrap()
+                    },
+                    PyObject::DictObj(ref obj) => {
+                        obj.lookup(&v2).unwrap()
+                    },
+                    _ => panic!("Type Error: eval SubscrExpr"),
+                }
+            },
+            &Expr::ListExpr(ref cl) => {
+                let v: Vec<Rc<PyObject>> = cl.iter().map(|e|{ e.eval(Rc::clone(&env)) }).collect();
+                Rc::new(PyObject::from_vec(v))
             },
             &Expr::DictExpr(ref pl) => {
                 let mut dictobj = PyObject::new_dict();

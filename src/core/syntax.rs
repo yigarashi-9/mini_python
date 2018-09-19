@@ -13,6 +13,7 @@ pub enum Expr {
     CallExpr(Box<Expr>, Vec<Expr>),
     AttrExpr(Box<Expr>, Id),
     SubscrExpr(Box<Expr>, Box<Expr>),
+    ListExpr(Vec<Expr>),
     DictExpr(Vec<(Expr, Expr)>)
 }
 
@@ -30,6 +31,7 @@ impl Expr {
             &Expr::CallExpr(_, _) => "CallExpr",
             &Expr::AttrExpr(_, _) => "AttrExpr",
             &Expr::SubscrExpr(_, _) => "SubscrExpr",
+            &Expr::ListExpr(_) => "ListExpr",
             &Expr::DictExpr(_) => "DictExpr",
         };
         str.to_string()

@@ -4,6 +4,7 @@ use object::longobj::*;
 use object::boolobj::*;
 use object::strobj::*;
 use object::noneobj::*;
+use object::listobj::*;
 use object::dictobj::*;
 use object::typeobj::*;
 use object::methodobj::*;
@@ -18,6 +19,7 @@ pub enum PyObject {
     FunObj(Rc<PyFuncObject>),
     InstObj(Rc<PyInstObject>),
     MethodObj(Rc<PyMethodObject>),
+    ListObj(Rc<PyListObject>),
     DictObj(Rc<PyDictObject>),
     TypeObj(Rc<PyTypeObject>),
 }
@@ -32,6 +34,7 @@ impl PyObject {
             &PyObject::FunObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::InstObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::MethodObj(ref obj) => Rc::clone(&obj.ob_type),
+            &PyObject::ListObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::DictObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::TypeObj(ref obj) =>
                 match obj.ob_type {
@@ -55,6 +58,10 @@ impl PyObject {
 
     pub fn from_string(raw_string: String) -> PyObject {
         PyObject::StrObj(Rc::new(PyStringObject::from_string(raw_string)))
+    }
+
+    pub fn from_vec(v: Vec<Rc<PyObject>>) -> PyObject {
+        PyObject::ListObj(Rc::new(PyListObject::from_vec(v)))
     }
 
     pub fn none_obj() -> PyObject {
@@ -99,5 +106,13 @@ pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
                 None => panic!("Type Error: pyobj_is_bool")
             }
         }
+    }
+}
+
+pub fn pyobj_to_i32(v: Rc<PyObject>) -> i32 {
+    match *v {
+        PyObject::LongObj(ref obj) => obj.n,
+        PyObject::BoolObj(ref obj) => if obj.b { 1 } else { 0 },
+        _ => panic!("Type Error: pyobj_to_i32"),
     }
 }

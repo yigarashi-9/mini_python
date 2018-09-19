@@ -46,11 +46,12 @@ pexpr -> cexpr Plus pexpr
 cexpr -> aexpr successor*
        | aexpr
 
-successor -> LParen arg_list RParen
+successor -> LParen comma_list RParen
            | Dot Ident
            | LBrace expr RBrace
 
 aexpr -> LParen expr RParen
+       | LBracket (expr (Comma expr)*)? RBracket
        | LBrace (expr Colon expr)* RBrace
        | True
        | False
@@ -59,9 +60,9 @@ aexpr -> LParen expr RParen
        | Str
        | None
 
-arg_list ->
+comma_list ->
   | expr
-  | expr Comma arg_list
+  | expr Comma comma_list
   | e
  */
 
@@ -82,7 +83,7 @@ pub trait TokenStream {
     fn eexpr(&mut self) -> Expr;
     fn pexpr(&mut self) -> Expr;
     fn cexpr(&mut self) -> Expr;
-    fn arg_list(&mut self) -> Vec<Expr>;
+    fn comma_list(&mut self) -> Vec<Expr>;
     fn pair_list(&mut self) -> Vec<(Expr, Expr)>;
     fn is_expr(&mut self) -> bool;
     fn aexpr(&mut self) -> Expr;
@@ -316,9 +317,9 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
             match self.peek() {
                 Some(&Token::LParen) => {
                     self.consume(Token::LParen);
-                    let arg_list = self.arg_list();
+                    let comma_list = self.comma_list();
                     self.consume(Token::RParen);
-                    expr = Expr::CallExpr(Box::new(expr), arg_list)
+                    expr = Expr::CallExpr(Box::new(expr), comma_list)
                 },
                 Some(&Token::Dot) => {
                     self.consume(Token::Dot);
@@ -344,6 +345,13 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
                 let expr = self.expr();
                 self.consume(Token::RParen);
                 expr
+            },
+            &Token::LBracket => {
+                self.consume(Token::LBracket);
+                let cl = self.comma_list();
+                self.consume(Token::RBracket);
+                Expr::ListExpr(cl)
+
             },
             &Token::LBrace => {
                 self.consume(Token::LBrace);
@@ -378,6 +386,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     fn is_expr(&mut self) -> bool {
         match self.peek() {
             Some(&Token::LParen) => true,
+            Some(&Token::LBracket) => true,
             Some(&Token::LBrace) => true,
             Some(&Token::True) => true,
             Some(&Token::False) => true,
@@ -389,7 +398,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         }
     }
 
-    fn arg_list(&mut self) -> Vec<Expr> {
+    fn comma_list(&mut self) -> Vec<Expr> {
         let mut al: Vec<Expr>  = vec![];
 
         if self.is_expr() {

@@ -6,6 +6,7 @@ pub mod noneobj;
 pub mod funobj;
 pub mod instobj;
 pub mod methodobj;
+pub mod listobj;
 pub mod dictobj;
 pub mod typeobj;
 pub mod pyhashmap;

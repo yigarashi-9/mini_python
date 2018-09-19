@@ -67,6 +67,10 @@ impl PyTypeObject {
         methodobj::new_method_type_object()
     }
 
+    pub fn new_list() -> PyTypeObject {
+        listobj::new_list_type_object()
+    }
+
     pub fn new_dict() -> PyTypeObject {
         dictobj::new_dict_type_object()
     }
