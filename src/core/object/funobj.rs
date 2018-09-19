@@ -11,16 +11,21 @@ pub struct PyFuncObject {
     pub code: Program,
 }
 
-pub fn new_fun_type_object() -> PyTypeObject {
-    PyTypeObject {
-        ob_type: Some(Rc::new(PyTypeObject::new_type())),
-        tp_name: "function".to_string(),
-        tp_hash: Some(Box::new(default_hash)),
-        tp_bool: None,
-        tp_fun_eq: None,
-        tp_fun_add: None,
-        tp_fun_lt: None,
-        tp_len: None,
-        tp_dict: None,
+thread_local! (
+    pub static PY_FUNC_TYPE: Rc<PyTypeObject> = {
+        PY_TYPE_TYPE.with(|tp| {
+            let tp =  PyTypeObject {
+                ob_type: Some(Rc::clone(&tp)),
+                tp_name: "function".to_string(),
+                tp_hash: Some(Box::new(default_hash)),
+                tp_bool: None,
+                tp_fun_eq: None,
+                tp_fun_add: None,
+                tp_fun_lt: None,
+                tp_len: None,
+                tp_dict: None,
+            };
+            Rc::new(tp)
+        })
     }
-}
+);

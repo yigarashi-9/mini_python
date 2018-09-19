@@ -28,6 +28,10 @@ pub fn default_hash(obj: Rc<PyObject>) -> u64 {
     hasher.finish()
 }
 
+thread_local! (
+    pub static PY_TYPE_TYPE: Rc<PyTypeObject> = Rc::new(PyTypeObject::new_type())
+);
+
 impl PyTypeObject {
     pub fn new_type() -> PyTypeObject {
         PyTypeObject {
@@ -41,38 +45,6 @@ impl PyTypeObject {
             tp_len: None,
             tp_dict: None,
         }
-    }
-
-    pub fn new_int() -> PyTypeObject {
-        longobj::new_long_type_object()
-    }
-
-    pub fn new_bool() -> PyTypeObject {
-        boolobj::new_bool_type_object()
-    }
-
-    pub fn new_str() -> PyTypeObject {
-        strobj::new_str_type_object()
-    }
-
-    pub fn new_none() -> PyTypeObject {
-        noneobj::new_none_type_object()
-    }
-
-    pub fn new_function() -> PyTypeObject {
-        funobj::new_fun_type_object()
-    }
-
-    pub fn new_method() -> PyTypeObject {
-        methodobj::new_method_type_object()
-    }
-
-    pub fn new_list() -> PyTypeObject {
-        listobj::new_list_type_object()
-    }
-
-    pub fn new_dict() -> PyTypeObject {
-        dictobj::new_dict_type_object()
     }
 
     pub fn tp_dict_ref(&self) -> &Option<Rc<PyDictObject>> {

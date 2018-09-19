@@ -5,20 +5,6 @@ use std::rc::Rc;
 use object::object::*;
 use object::typeobj::*;
 
-pub struct PyStringObject {
-    pub ob_type: Rc<PyTypeObject>,
-    s: String,
-}
-
-impl PyStringObject {
-    pub fn from_string(raw_string: String) -> PyStringObject {
-        PyStringObject {
-            ob_type: Rc::new(PyTypeObject::new_str()),
-            s: raw_string
-        }
-    }
-}
-
 fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match *lv {
         PyObject::StrObj(ref l_obj) => {
@@ -61,16 +47,37 @@ fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
     }
 }
 
-pub fn new_str_type_object() -> PyTypeObject {
-    PyTypeObject {
-        ob_type: Some(Rc::new(PyTypeObject::new_type())),
-        tp_name: "str".to_string(),
-        tp_hash: Some(Box::new(str_hash)),
-        tp_bool: None,
-        tp_fun_eq: Some(Box::new(eq_str_str)),
-        tp_fun_add: Some(Box::new(add_str_str)),
-        tp_fun_lt: None,
-        tp_len: Some(Box::new(str_len)),
-        tp_dict: None,
+thread_local! (
+    pub static PY_STRING_TYPE: Rc<PyTypeObject> = {
+        PY_TYPE_TYPE.with(|tp| {
+            let tp = PyTypeObject {
+                ob_type: Some(Rc::clone(&tp)),
+                tp_name: "str".to_string(),
+                tp_hash: Some(Box::new(str_hash)),
+                tp_bool: None,
+                tp_fun_eq: Some(Box::new(eq_str_str)),
+                tp_fun_add: Some(Box::new(add_str_str)),
+                tp_fun_lt: None,
+                tp_len: Some(Box::new(str_len)),
+                tp_dict: None,
+            };
+            Rc::new(tp)
+        })
+    }
+);
+
+pub struct PyStringObject {
+    pub ob_type: Rc<PyTypeObject>,
+    s: String,
+}
+
+impl PyStringObject {
+    pub fn from_string(raw_string: String) -> PyStringObject {
+        PY_STRING_TYPE.with(|tp| {
+            PyStringObject {
+                ob_type: Rc::clone(&tp),
+                s: raw_string
+            }
+        })
     }
 }

@@ -5,20 +5,6 @@ use std::rc::Rc;
 use object::object::*;
 use object::typeobj::*;
 
-pub struct PyLongObject {
-    pub ob_type: Rc<PyTypeObject>,
-    pub n: i32,
-}
-
-impl PyLongObject {
-    pub fn from_i32(raw_i32: i32) -> PyLongObject {
-        PyLongObject {
-            ob_type: Rc::new(PyTypeObject::new_int()),
-            n: raw_i32,
-        }
-    }
-}
-
 fn eq_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match *lv {
         PyObject::LongObj(ref l_obj) => {
@@ -72,16 +58,37 @@ fn long_bool(v: Rc<PyObject>) -> Rc<PyObject> {
     }
 }
 
-pub fn new_long_type_object() -> PyTypeObject {
-    PyTypeObject {
-        ob_type: Some(Rc::new(PyTypeObject::new_type())),
-        tp_name: "int".to_string(),
-        tp_hash: Some(Box::new(long_hash)),
-        tp_bool: Some(Box::new(long_bool)),
-        tp_fun_eq: Some(Box::new(eq_long_long)),
-        tp_fun_add: Some(Box::new(add_long_long)),
-        tp_fun_lt: Some(Box::new(lt_long_long)),
-        tp_len: None,
-        tp_dict: None,
+thread_local! (
+    pub static PY_LONG_TYPE: Rc<PyTypeObject> = {
+        PY_TYPE_TYPE.with(|tp| {
+            let tp = PyTypeObject {
+                ob_type: Some(Rc::clone(&tp)),
+                tp_name: "int".to_string(),
+                tp_hash: Some(Box::new(long_hash)),
+                tp_bool: Some(Box::new(long_bool)),
+                tp_fun_eq: Some(Box::new(eq_long_long)),
+                tp_fun_add: Some(Box::new(add_long_long)),
+                tp_fun_lt: Some(Box::new(lt_long_long)),
+                tp_len: None,
+                tp_dict: None,
+            };
+            Rc::new(tp)
+        })
+    }
+);
+
+pub struct PyLongObject {
+    pub ob_type: Rc<PyTypeObject>,
+    pub n: i32,
+}
+
+impl PyLongObject {
+    pub fn from_i32(raw_i32: i32) -> PyLongObject {
+        PY_LONG_TYPE.with(|tp| {
+            PyLongObject {
+                ob_type: Rc::clone(&tp),
+                n: raw_i32,
+            }
+        })
     }
 }

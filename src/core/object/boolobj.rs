@@ -5,20 +5,6 @@ use std::rc::Rc;
 use object::object::*;
 use object::typeobj::*;
 
-pub struct PyBoolObject {
-    pub ob_type: Rc<PyTypeObject>,
-    pub b: bool,
-}
-
-impl PyBoolObject {
-    pub fn from_bool(raw_bool: bool) -> PyBoolObject {
-        PyBoolObject {
-            ob_type: Rc::new(PyTypeObject::new_bool()),
-            b: raw_bool,
-        }
-    }
-}
-
 fn bool_bool(v: Rc<PyObject>) -> Rc<PyObject> {
     v
 }
@@ -45,16 +31,37 @@ fn bool_hash(obj: Rc<PyObject>) -> u64 {
     hasher.finish()
 }
 
-pub fn new_bool_type_object() -> PyTypeObject {
-    PyTypeObject {
-        ob_type: Some(Rc::new(PyTypeObject::new_type())),
-        tp_name: "bool".to_string(),
-        tp_hash: Some(Box::new(bool_hash)),
-        tp_bool: Some(Box::new(bool_bool)),
-        tp_fun_eq: Some(Box::new(eq_bool_bool)),
-        tp_fun_add: None,
-        tp_fun_lt: None,
-        tp_len: None,
-        tp_dict: None,
+thread_local! (
+    pub static PY_BOOL_TYPE: Rc<PyTypeObject> = {
+        PY_TYPE_TYPE.with(|tp| {
+            let tp = PyTypeObject {
+                ob_type: Some(Rc::clone(&tp)),
+                tp_name: "bool".to_string(),
+                tp_hash: Some(Box::new(bool_hash)),
+                tp_bool: Some(Box::new(bool_bool)),
+                tp_fun_eq: Some(Box::new(eq_bool_bool)),
+                tp_fun_add: None,
+                tp_fun_lt: None,
+                tp_len: None,
+                tp_dict: None,
+            };
+            Rc::new(tp)
+        })
+    }
+);
+
+pub struct PyBoolObject {
+    pub ob_type: Rc<PyTypeObject>,
+    pub b: bool,
+}
+
+impl PyBoolObject {
+    pub fn from_bool(raw_bool: bool) -> PyBoolObject {
+        PY_BOOL_TYPE.with(|tp| {
+            PyBoolObject {
+                ob_type: Rc::clone(&tp),
+                b: raw_bool,
+            }
+        })
     }
 }

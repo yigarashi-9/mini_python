@@ -65,7 +65,9 @@ impl PyObject {
     }
 
     pub fn none_obj() -> PyObject {
-        PyObject::NoneObj(Rc::new(PyNoneObject { ob_type: Rc::new(PyTypeObject::new_none()) }))
+        PY_NONE_TYPE.with(|tp| {
+            PyObject::NoneObj(Rc::new(PyNoneObject { ob_type: Rc::clone(&tp) }))
+        })
     }
 
     pub fn new_dict() -> PyObject {

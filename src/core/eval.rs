@@ -111,13 +111,15 @@ fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
 fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject> {
     match *value {
         PyObject::FunObj(ref fun) => Rc::new(PyObject::MethodObj(Rc::new(
-            PyMethodObject {
-                ob_type: Rc::new(PyTypeObject::new_method()),
-                ob_self: Rc::clone(instance_ref),
-                env: Rc::clone(&fun.env),
-                parms: fun.parms.clone(),
-                code: fun.code.clone(),
-            }))),
+            PY_METHOD_TYPE.with(|tp| {
+                PyMethodObject {
+                    ob_type: Rc::clone(tp),
+                    ob_self: Rc::clone(instance_ref),
+                    env: Rc::clone(&fun.env),
+                    parms: fun.parms.clone(),
+                    code: fun.code.clone(),
+                }
+            })))),
         _ => Rc::clone(&value),
     }
 }
@@ -259,12 +261,13 @@ impl Executable for CompoundStmt {
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
                 let funv = PyObject::FunObj(Rc::new(
-                    PyFuncObject {
-                        ob_type: Rc::new(PyTypeObject::new_function()),
-                        env: Rc::clone(&env),
-                        parms: parms.clone(),
-                        code: prog.clone(),
-                    }));
+                    PY_FUNC_TYPE.with(|tp| {
+                        PyFuncObject {
+                            ob_type: Rc::clone(&tp),
+                            env: Rc::clone(&env),
+                            parms: parms.clone(),
+                            code: prog.clone(),
+                        }})));
                 Rc::clone(&env).update(id.clone(), Rc::new(funv));
                 CtrlOp::Nop
             },
@@ -276,7 +279,7 @@ impl Executable for CompoundStmt {
                 }
                 let dictobj = Rc::new(new_env.dictobj());
                 let mut cls = PyTypeObject::new_type();
-                cls.ob_type = Some(Rc::new(PyTypeObject::new_type()));
+                cls.ob_type = PY_TYPE_TYPE.with(|tp|{ Some(Rc::clone(&tp)) });
                 cls.tp_name = id.clone();
                 // cls.tp_hash = dictobj.lookup(Rc::new(PyObject::from_str("__hash__")));
                 cls.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
