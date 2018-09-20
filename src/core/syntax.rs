@@ -60,7 +60,7 @@ pub enum CompoundStmt {
     IfStmt(Expr, Program, Program),
     WhileStmt(Expr, Program),
     DefStmt(Id, Vec<Id>, Program),
-    ClassStmt(Id, Program)
+    ClassStmt(Id, Vec<Expr>, Program)
 }
 
 #[derive(Clone)]

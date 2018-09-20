@@ -27,7 +27,7 @@ compound_stmt ->
   | If expr Colon NewLine block Else block
   | While expr Colon NewLine block
   | Def Ident(s) LParen parm_list RParen Colon NewLine block
-  | Class Ident(s) Colon NewLine block
+  | Class Ident(s) LParen (expr, ..., expr) RParen Colon NewLine block
 
 parm_list ->
   | Ident(s)
@@ -244,12 +244,20 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
     }
 
     fn class_stmt(&mut self) -> CompoundStmt {
+        let mut bases = vec![];
         self.consume(Token::Class);
         let class_name = self.consume_ident();
+
+        if self.match_token(Token::LParen) {
+            self.consume(Token::LParen);
+            bases = self.comma_list();
+            self.consume(Token::RParen);
+        }
+
         self.consume(Token::Colon);
         self.consume(Token::NewLine);
         let prog = self.block();
-        CompoundStmt::ClassStmt(class_name, prog)
+        CompoundStmt::ClassStmt(class_name, bases, prog)
     }
 
     fn parm_list(&mut self) -> Vec<Id> {

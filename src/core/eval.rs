@@ -140,19 +140,24 @@ fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject>
 fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
     let keyval = Rc::new(PyObject::from_string(key.clone()));
     match **value {
-        PyObject::TypeObj(ref typ) => match typ.tp_dict_ref() {
-            &Some(ref dict) => dict.lookup(&keyval),
-            &None => panic!("Type Error: get_attr"),
-        },
+        PyObject::TypeObj(ref typ) => typ.tp_dict_ref().as_ref().unwrap().lookup(&keyval),
         PyObject::InstObj(ref inst) => {
             match inst.dict.lookup(&keyval) {
                 Some(ret_val) => Some(ret_val),
-                None => match inst.class.tp_dict_ref() {
-                    &Some(ref dict) =>  match dict.lookup(&keyval) {
-                        Some(ret_val) => Some(make_method(Rc::clone(&ret_val), &value)),
-                        None => None
-                    },
-                    &None => panic!("Type Error: get_attr")
+                None => {
+                    let mro = get_attr(&Rc::new(PyObject::TypeObj(Rc::clone(&inst.class))), &"__mro__".to_string()).unwrap();
+                    match *mro {
+                        PyObject::ListObj(ref obj) => {
+                            for base in obj.list.borrow().iter() {
+                                match get_attr(base, key) {
+                                    Some(ret_val) => return Some(make_method(Rc::clone(&ret_val), &value)),
+                                    None => continue,
+                                }
+                            };
+                            None
+                        },
+                        _ => panic!("Internal Error: get_attr mro"),
+                    }
                 }
             }
         },
@@ -252,6 +257,51 @@ impl Executable for SimpleStmt {
     }
 }
 
+fn pick_winner(mro_list: &Vec<Vec<Rc<PyObject>>>) -> Rc<PyObject> {
+    for mro in mro_list {
+        let cand = &mro[0];
+
+        let mut win = true;
+        for others in mro_list {
+            let (_, tail) = others.split_at(1);
+            if tail.contains(cand) {
+                win = false;
+                break;
+            }
+        }
+
+        if win { return Rc::clone(cand) };
+    }
+    panic!("pick_candidate: No candidate")
+}
+
+fn remove_winner(winner: Rc<PyObject>, mro_list: Vec<Vec<Rc<PyObject>>>) -> Vec<Vec<Rc<PyObject>>> {
+    let mut new_list = vec![];
+    for mro in mro_list {
+        let mut new_mro = vec![];
+        for class in mro {
+            if &*winner as *const _ != &*class as *const _ { new_mro.push(Rc::clone(&class)); }
+        }
+        if new_mro.len() > 0 { new_list.push(new_mro); }
+    };
+    new_list
+}
+
+fn linearlize(arg: Vec<Vec<Rc<PyObject>>>) -> Vec<Rc<PyObject>> {
+    let mut mro_list = arg;
+    let mut mro = vec![];
+    loop {
+        if mro_list.len() == 0 {
+            break;
+        }
+        let winner = pick_winner(&mro_list);
+        mro.push(Rc::clone(&winner));
+        mro_list = remove_winner(winner, mro_list);
+    };
+    mro
+}
+
+
 impl Executable for CompoundStmt {
     fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
@@ -284,7 +334,7 @@ impl Executable for CompoundStmt {
                 Rc::clone(&env).update(id.clone(), Rc::new(funv));
                 CtrlOp::Nop
             },
-            &CompoundStmt::ClassStmt(ref id, ref prog) => {
+            &CompoundStmt::ClassStmt(ref id, ref bases, ref prog) => {
                 let new_env = Rc::new(Env::new_child(&env, &vec![], &vec![]));
                 match prog.exec(Rc::clone(&new_env)) {
                     CtrlOp::Nop => (),
@@ -292,16 +342,32 @@ impl Executable for CompoundStmt {
                 }
                 let dictobj = Rc::new(new_env.dictobj());
                 let mut cls = PyTypeObject::new_type();
+                cls.tp_dict = Some(Rc::clone(&dictobj));
                 cls.ob_type = PY_TYPE_TYPE.with(|tp|{ Some(Rc::clone(&tp)) });
                 cls.tp_name = id.clone();
-                // cls.tp_hash = dictobj.lookup(Rc::new(PyObject::from_str("__hash__")));
                 cls.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
                 cls.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
                 cls.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
                 cls.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
                 cls.tp_len = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__");
-                cls.tp_dict = Some(Rc::clone(&dictobj));
-                env.update(id.clone(), Rc::new(PyObject::TypeObj(Rc::new(cls))));
+
+                let bases: Vec<Rc<PyObject>> = bases.iter().map(|e| { e.eval(Rc::clone(&env)) }).collect();
+                let mut mro_list = vec![];
+                for base in bases {
+                    let pylist = get_attr(&base, &"__mro__".to_string()).unwrap();
+                    match *pylist {
+                        PyObject::ListObj(ref obj) => {
+                            mro_list.push(obj.list.borrow().clone());
+                        },
+                        _ => panic!("Type Error: mro")
+                    }
+                }
+
+                let clsobj = Rc::new(PyObject::TypeObj(Rc::new(cls)));
+                let mut mro = linearlize(mro_list);
+                mro.insert(0, Rc::clone(&clsobj));
+                update_attr(&clsobj, "__mro__".to_string(), Rc::new(PyObject::from_vec(mro)));
+                env.update(id.clone(), clsobj);
                 CtrlOp::Nop
             }
         }

@@ -27,6 +27,12 @@ pub enum PyObject {
     TypeObj(Rc<PyTypeObject>),
 }
 
+impl PartialEq for PyObject {
+    fn eq(&self, other: &PyObject) -> bool {
+        self as *const _ == other as *const _
+    }
+}
+
 impl PyObject {
     pub fn ob_type(&self) -> Rc<PyTypeObject> {
         match self {

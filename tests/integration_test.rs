@@ -65,5 +65,6 @@ test_cases![
     dict_basic,
     string_add, meta_add,
     list_basic,
-    builtin_len
+    builtin_len,
+    inheritance_simple, inheritance_complex
 ];
