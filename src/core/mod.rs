@@ -7,3 +7,4 @@ pub mod parser;
 pub mod env;
 pub mod object;
 pub mod eval;
+pub mod builtinmodule;

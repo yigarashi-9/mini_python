@@ -9,12 +9,15 @@ use core::lexer::*;
 use core::parser::*;
 use core::env::Env;
 use core::eval::*;
+use core::builtinmodule::*;
 
 fn run_prog_string(prog: String) {
     match tokenize(prog) {
         Ok(tokens) => {
             let program = tokens.into_iter().peekable().parse();
-            match program.exec(Rc::new(Env::new())) {
+            let env = Rc::new(Env::new());
+            load_builtins(Rc::clone(&env));
+            match program.exec(env) {
                 CtrlOp::Nop => (),
                 _ => panic!("InvalidCtrlOp")
             }
@@ -61,5 +64,6 @@ test_cases![
     class_var, class_instance_var, class_method, assign_attr, class_update, class_init,
     dict_basic,
     string_add, meta_add,
-    list_basic
+    list_basic,
+    builtin_len
 ];

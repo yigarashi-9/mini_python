@@ -1,22 +1,24 @@
 use std::rc::Rc;
 
-use env::Env;
+use object::object::*;
 use object::typeobj::*;
-use syntax::{Id, Program};
 
-pub struct PyFunObject {
+pub struct PyRustFunObject {
     pub ob_type: Rc<PyTypeObject>,
-    pub env: Rc<Env>,
-    pub parms: Vec<Id>,
-    pub code: Program,
+    pub ob_self: Option<Rc<PyTypeObject>>,
+    pub rust_fun: PyRustFun,
+}
+
+pub enum PyRustFun {
+    MethO(Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>),
 }
 
 thread_local! (
-    pub static PY_FUN_TYPE: Rc<PyTypeObject> = {
+    pub static PY_RUSTFUN_TYPE: Rc<PyTypeObject> = {
         PY_TYPE_TYPE.with(|tp| {
             let tp =  PyTypeObject {
                 ob_type: Some(Rc::clone(&tp)),
-                tp_name: "function".to_string(),
+                tp_name: "rustfunction".to_string(),
                 tp_hash: Some(Box::new(default_hash)),
                 tp_bool: None,
                 tp_fun_eq: None,

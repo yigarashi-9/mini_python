@@ -9,6 +9,7 @@ use core::lexer::*;
 use core::parser::*;
 use core::env::Env;
 use core::eval::*;
+use core::builtinmodule::*;
 
 fn main() -> std::io::Result<()> {
     let file = File::open("test.py").unwrap();
@@ -19,6 +20,7 @@ fn main() -> std::io::Result<()> {
         Ok(tokens) => {
             let program = tokens.into_iter().peekable().parse();
             let env = Rc::new(Env::new());
+            load_builtins(Rc::clone(&env));
             match program.exec(env) {
                 CtrlOp::Nop => (),
                 _ => panic!("Invalid control operator")

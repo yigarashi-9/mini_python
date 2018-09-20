@@ -3,12 +3,14 @@ use std::rc::Rc;
 use syntax::*;
 use env::*;
 
-use object::object::*;
 use object::dictobj::*;
-use object::typeobj::*;
-use object::methodobj::*;
-use object::instobj::*;
 use object::funobj::*;
+use object::instobj::*;
+use object::methodobj::*;
+use object::object::*;
+use object::rustfunobj::*;
+use object::typeobj::*;
+
 
 impl Expr {
     fn eval(&self, env: Rc<Env>) -> Rc<PyObject> {
@@ -88,6 +90,17 @@ fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
                 CtrlOp::Nop => Rc::new(PyObject::none_obj()),
                 CtrlOp::Return(val) => val,
                 _ => panic!("Invalid control operator"),
+            }
+        },
+        PyObject::RustFunObj(ref obj) => {
+            match obj.rust_fun {
+                PyRustFun::MethO(ref fun) => {
+                    if args.len() != 1 {
+                        panic!("Type error: call_func RustFunObj METH_O");
+                    } else {
+                        (*fun)(Rc::clone(&args[0]))
+                    }
+                }
             }
         },
         PyObject::TypeObj(ref cls) => {
@@ -261,8 +274,8 @@ impl Executable for CompoundStmt {
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
                 let funv = PyObject::FunObj(Rc::new(
-                    PY_FUNC_TYPE.with(|tp| {
-                        PyFuncObject {
+                    PY_FUN_TYPE.with(|tp| {
+                        PyFunObject {
                             ob_type: Rc::clone(&tp),
                             env: Rc::clone(&env),
                             parms: parms.clone(),

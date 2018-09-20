@@ -1,26 +1,29 @@
 use std::rc::Rc;
 
-use object::longobj::*;
 use object::boolobj::*;
-use object::strobj::*;
-use object::noneobj::*;
-use object::listobj::*;
 use object::dictobj::*;
-use object::typeobj::*;
-use object::methodobj::*;
-use object::instobj::*;
 use object::funobj::*;
+use object::instobj::*;
+use object::listobj::*;
+use object::longobj::*;
+use object::methodobj::*;
+use object::noneobj::*;
+use object::rustfunobj::*;
+use object::strobj::*;
+use object::typeobj::*;
+
 
 pub enum PyObject {
-    LongObj(Rc<PyLongObject>),
     BoolObj(Rc<PyBoolObject>),
-    StrObj(Rc<PyStringObject>),
-    NoneObj(Rc<PyNoneObject>),
-    FunObj(Rc<PyFuncObject>),
-    InstObj(Rc<PyInstObject>),
-    MethodObj(Rc<PyMethodObject>),
-    ListObj(Rc<PyListObject>),
     DictObj(Rc<PyDictObject>),
+    FunObj(Rc<PyFunObject>),
+    InstObj(Rc<PyInstObject>),
+    ListObj(Rc<PyListObject>),
+    LongObj(Rc<PyLongObject>),
+    MethodObj(Rc<PyMethodObject>),
+    NoneObj(Rc<PyNoneObject>),
+    RustFunObj(Rc<PyRustFunObject>),
+    StrObj(Rc<PyStringObject>),
     TypeObj(Rc<PyTypeObject>),
 }
 
@@ -36,6 +39,7 @@ impl PyObject {
             &PyObject::MethodObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::ListObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::DictObj(ref obj) => Rc::clone(&obj.ob_type),
+            &PyObject::RustFunObj(ref obj) => Rc::clone(&obj.ob_type),
             &PyObject::TypeObj(ref obj) =>
                 match obj.ob_type {
                     Some(ref ob_type) => Rc::clone(ob_type),
