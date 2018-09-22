@@ -10,7 +10,7 @@ fn eq_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
         PyInnerObject::LongObj(ref l_obj) => {
             match rv.inner {
                 PyInnerObject::LongObj(ref r_obj) =>
-                    Rc::new(PyObject::from_bool(l_obj.n == r_obj.n)),
+                    PyObject::from_bool(l_obj.n == r_obj.n),
                 _ => panic!("Type Error: eq_long_long"),
             }
         },
@@ -22,7 +22,7 @@ fn add_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match lv.inner {
         PyInnerObject::LongObj(ref l_obj) => {
             match rv.inner {
-                PyInnerObject::LongObj(ref r_obj) => Rc::new(PyObject::from_i32(l_obj.n + r_obj.n)),
+                PyInnerObject::LongObj(ref r_obj) => PyObject::from_i32(l_obj.n + r_obj.n),
                 _ => panic!("Type Error: add_long_long"),
             }
         },
@@ -34,7 +34,7 @@ fn lt_long_long(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
     match lv.inner {
         PyInnerObject::LongObj(ref l_obj) => {
             match rv.inner {
-                PyInnerObject::LongObj(ref r_obj) => Rc::new(PyObject::from_bool(l_obj.n < r_obj.n)),
+                PyInnerObject::LongObj(ref r_obj) => PyObject::from_bool(l_obj.n < r_obj.n),
                 _ => panic!("Type Error: lt_long_long"),
             }
         },
@@ -53,7 +53,7 @@ fn long_hash(obj: Rc<PyObject>) -> u64 {
 
 fn long_bool(v: Rc<PyObject>) -> Rc<PyObject> {
     match v.inner {
-        PyInnerObject::LongObj(ref obj) => Rc::new(PyObject::from_bool(obj.n > 0)),
+        PyInnerObject::LongObj(ref obj) => PyObject::from_bool(obj.n > 0),
         _ => panic!("Type Error: long_bool")
     }
 }
@@ -82,13 +82,13 @@ pub struct PyLongObject {
 }
 
 impl PyObject {
-    pub fn from_i32(raw_i32: i32) -> PyObject {
+    pub fn from_i32(raw_i32: i32) -> Rc<PyObject> {
         PY_LONG_TYPE.with(|tp| {
             let inner = PyLongObject { n: raw_i32 };
-            PyObject {
+            Rc::new(PyObject {
                 ob_type: Rc::clone(&tp),
                 inner: PyInnerObject::LongObj(Rc::new(inner))
-            }
+            })
         })
     }
 }

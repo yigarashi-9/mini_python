@@ -16,9 +16,9 @@ impl Expr {
     fn eval(&self, env: Rc<Env>) -> Rc<PyObject> {
         match self {
             &Expr::VarExpr(ref id) => env.get(id),
-            &Expr::IntExpr(i) => Rc::new(PyObject::from_i32(i)),
-            &Expr::BoolExpr(b) => Rc::new(PyObject::from_bool(b)),
-            &Expr::StrExpr(ref s) => Rc::new(PyObject::from_string(s.clone())),
+            &Expr::IntExpr(i) => PyObject::from_i32(i),
+            &Expr::BoolExpr(b) => PyObject::from_bool(b),
+            &Expr::StrExpr(ref s) => PyObject::from_string(s.clone()),
             &Expr::NoneExpr => PyObject::none_obj(),
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
@@ -62,7 +62,7 @@ impl Expr {
             },
             &Expr::ListExpr(ref cl) => {
                 let v: Vec<Rc<PyObject>> = cl.iter().map(|e|{ e.eval(Rc::clone(&env)) }).collect();
-                Rc::new(PyObject::from_vec(v))
+                PyObject::from_vec(v)
             },
             &Expr::DictExpr(ref pl) => {
                 let mut dictobj = PyObject::new_dict();
@@ -177,7 +177,7 @@ fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
 }
 
 fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
-    let keyval = Rc::new(PyObject::from_string(key));
+    let keyval = PyObject::from_string(key);
     let value = Rc::clone(value);
     match value.inner {
         PyInnerObject::TypeObj(ref typ) => {
@@ -200,7 +200,7 @@ pub fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
 
 pub fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
     Option<Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.lookup(&Rc::new(PyObject::from_str(s))).map(unaryop_from_pyobj)
+        dict.lookup(&PyObject::from_str(s)).map(unaryop_from_pyobj)
     }
 
 pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
@@ -210,7 +210,7 @@ pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
 
 pub fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
     Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.lookup(&Rc::new(PyObject::from_str(s))).map(binop_from_pyobj)
+        dict.lookup(&PyObject::from_str(s)).map(binop_from_pyobj)
     }
 
 
@@ -384,7 +384,7 @@ impl Executable for CompoundStmt {
                 }));
                 let mut mro = linearlize(mro_list);
                 mro.insert(0, Rc::clone(&clsobj));
-                update_attr(&clsobj, "__mro__".to_string(), Rc::new(PyObject::from_vec(mro)));
+                update_attr(&clsobj, "__mro__".to_string(), PyObject::from_vec(mro));
                 env.update(id.clone(), clsobj);
                 CtrlOp::Nop
             }

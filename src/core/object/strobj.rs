@@ -10,7 +10,7 @@ fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
         PyInnerObject::StrObj(ref l_obj) => {
             match rv.inner {
                 PyInnerObject::StrObj(ref r_obj) =>
-                    Rc::new(PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s))),
+                    PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s)),
                 _ => panic!("Type Error: add_str_str"),
             }
         },
@@ -23,7 +23,7 @@ fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
         PyInnerObject::StrObj(ref l_obj) => {
             match rv.inner {
                 PyInnerObject::StrObj(ref r_obj) =>
-                    Rc::new(PyObject::from_bool(l_obj.s == r_obj.s)),
+                    PyObject::from_bool(l_obj.s == r_obj.s),
                 _ => panic!("Type Error: eq_str_str"),
             }
         },
@@ -42,7 +42,7 @@ fn str_hash(obj: Rc<PyObject>) -> u64 {
 
 fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
     match v.inner {
-        PyInnerObject::StrObj(ref obj) => Rc::new(PyObject::from_i32(obj.s.len() as i32)),
+        PyInnerObject::StrObj(ref obj) => PyObject::from_i32(obj.s.len() as i32),
         _ => panic!("Type Error: str_len")
     }
 }
@@ -71,18 +71,17 @@ pub struct PyStringObject {
 }
 
 impl PyObject {
-    pub fn from_str(s: &str) -> PyObject {
+    pub fn from_str(s: &str) -> Rc<PyObject> {
         PyObject::from_string(s.to_string())
     }
 
-    pub fn from_string(raw_string: String) -> PyObject {
+    pub fn from_string(raw_string: String) -> Rc<PyObject> {
         PY_STRING_TYPE.with(|tp| {
             let inner = PyStringObject { s: raw_string };
-            PyObject {
+            Rc::new(PyObject {
                 ob_type: Rc::clone(&tp),
                 inner: PyInnerObject::StrObj(Rc::new(inner))
-            }
-
+            })
         })
     }
 }

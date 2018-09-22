@@ -19,16 +19,20 @@ thread_local! (
             };
             Rc::new(tp)
         })
-    }
-);
+    };
 
-impl PyObject {
-    pub fn none_obj() -> Rc<PyObject> {
+    pub static PY_NONE_OBJECT: Rc<PyObject> = {
         PY_NONE_TYPE.with(|tp| {
             Rc::new(PyObject {
                 ob_type: Rc::clone(&tp),
                 inner: PyInnerObject::NoneObj
             })
         })
+    }
+);
+
+impl PyObject {
+    pub fn none_obj() -> Rc<PyObject> {
+        PY_NONE_OBJECT.with(|obj| { Rc::clone(&obj) })
     }
 }

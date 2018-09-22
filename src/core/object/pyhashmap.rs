@@ -32,6 +32,6 @@ impl PyHashMap {
     }
 
     pub fn len(&self) -> Rc<PyObject> {
-        Rc::new(PyObject::from_i32(self.table.len() as i32))
+        PyObject::from_i32(self.table.len() as i32)
     }
 }

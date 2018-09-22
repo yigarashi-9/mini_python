@@ -7,14 +7,14 @@ use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 
 fn list_len(v: Rc<PyObject>) -> Rc<PyObject> {
     match v.inner {
-        PyInnerObject::ListObj(ref obj) => Rc::new(PyObject::from_i32(obj.list.borrow().len() as i32)),
+        PyInnerObject::ListObj(ref obj) => PyObject::from_i32(obj.list.borrow().len() as i32),
         _ => panic!("TypeError: list_len")
     }
 }
 
 fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
     match v.inner {
-        PyInnerObject::ListObj(ref obj) => Rc::new(PyObject::from_bool(!(obj.list.borrow().is_empty()))),
+        PyInnerObject::ListObj(ref obj) => PyObject::from_bool(!(obj.list.borrow().is_empty())),
         _ => panic!("TypeError: list_bool")
     }
 }
@@ -43,15 +43,15 @@ pub struct PyListObject {
 }
 
 impl PyObject {
-    pub fn from_vec(v: Vec<Rc<PyObject>>) -> PyObject {
+    pub fn from_vec(v: Vec<Rc<PyObject>>) -> Rc<PyObject> {
         PY_LIST_TYPE.with(|tp| {
             let inner = PyListObject {
                 list: RefCell::new(v.iter().map(|v|{ Rc::clone(&v) }).collect()),
             };
-            PyObject {
+            Rc::new(PyObject {
                 ob_type: Rc::clone(&tp),
                 inner: PyInnerObject::ListObj(Rc::new(inner))
-            }
+            })
         })
     }
 

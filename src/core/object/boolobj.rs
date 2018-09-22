@@ -14,7 +14,7 @@ fn eq_bool_bool(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
         PyInnerObject::BoolObj(ref l_obj) => {
             match rv.inner {
                 PyInnerObject::BoolObj(ref r_obj) =>
-                    Rc::new(PyObject::from_bool(l_obj.b == r_obj.b)),
+                    PyObject::from_bool(l_obj.b == r_obj.b),
                 _ => panic!("Type Error: eq_bool_bool"),
             }
         },
@@ -29,6 +29,10 @@ fn bool_hash(obj: Rc<PyObject>) -> u64 {
         _ => panic!("Type Error: bool_hash")
     };
     hasher.finish()
+}
+
+pub struct PyBoolObject {
+    pub b: bool,
 }
 
 thread_local! (
@@ -47,21 +51,35 @@ thread_local! (
             };
             Rc::new(tp)
         })
+    };
+
+    pub static PY_TRUE: Rc<PyObject> = {
+        PY_BOOL_TYPE.with(|tp| {
+            let inner = PyBoolObject { b: true };
+            Rc::new(PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::BoolObj(Rc::new(inner))
+            })
+        })
+    };
+
+    pub static PY_FALSE: Rc<PyObject> = {
+        PY_BOOL_TYPE.with(|tp| {
+            let inner = PyBoolObject { b: false };
+            Rc::new(PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::BoolObj(Rc::new(inner))
+            })
+        })
     }
 );
 
-pub struct PyBoolObject {
-    pub b: bool,
-}
-
 impl PyObject {
-    pub fn from_bool(raw_bool: bool) -> PyObject {
-        PY_BOOL_TYPE.with(|tp| {
-            let inner = PyBoolObject { b: raw_bool };
-            PyObject {
-                ob_type: Rc::clone(&tp),
-                inner: PyInnerObject::BoolObj(Rc::new(inner))
-            }
-        })
+    pub fn from_bool(raw_bool: bool) -> Rc<PyObject> {
+        if raw_bool {
+            PY_TRUE.with(|obj| { Rc::clone(&obj) })
+        } else {
+            PY_FALSE.with(|obj| { Rc::clone(&obj) })
+        }
     }
 }

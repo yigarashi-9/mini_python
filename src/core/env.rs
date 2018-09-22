@@ -44,7 +44,7 @@ impl Env {
         let dictobj = PyObject::new_dict();
         for (k, v) in self.map.borrow().iter() {
             let key = PyObject::from_string(k.clone());
-            dictobj.update(Rc::new(key), Rc::clone(v));
+            dictobj.update(key, Rc::clone(v));
         }
         dictobj
     }
