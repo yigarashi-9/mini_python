@@ -2,9 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use object::*;
-use object::object::PyObject;
-use object::dictobj::PyDictObject;
+use object::PyObject;
 
 pub type HashFunc = Option<Box<dyn Fn(Rc<PyObject>) -> u64>>;
 pub type UnaryOp = Option<Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>>;
@@ -19,7 +17,7 @@ pub struct PyTypeObject {
     pub tp_fun_add: BinaryOp,
     pub tp_fun_lt: BinaryOp,
     pub tp_len: UnaryOp,
-    pub tp_dict: Option<Rc<PyDictObject>>,
+    pub tp_dict: Option<Rc<PyObject>>,
 }
 
 pub fn default_hash(obj: Rc<PyObject>) -> u64 {
@@ -47,7 +45,7 @@ impl PyTypeObject {
         }
     }
 
-    pub fn tp_dict_ref(&self) -> &Option<Rc<PyDictObject>> {
+    pub fn tp_dict_ref(&self) -> &Option<Rc<PyObject>> {
         &self.tp_dict
     }
 }

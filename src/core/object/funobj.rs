@@ -5,7 +5,6 @@ use object::typeobj::*;
 use syntax::{Id, Program};
 
 pub struct PyFunObject {
-    pub ob_type: Rc<PyTypeObject>,
     pub env: Rc<Env>,
     pub parms: Vec<Id>,
     pub code: Program,

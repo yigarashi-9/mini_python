@@ -3,11 +3,11 @@ use std::rc::Rc;
 use syntax::*;
 use env::*;
 
-use object::dictobj::*;
+use object::*;
 use object::funobj::*;
+use object::generic::*;
 use object::instobj::*;
 use object::methodobj::*;
-use object::object::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
@@ -19,21 +19,24 @@ impl Expr {
             &Expr::IntExpr(i) => Rc::new(PyObject::from_i32(i)),
             &Expr::BoolExpr(b) => Rc::new(PyObject::from_bool(b)),
             &Expr::StrExpr(ref s) => Rc::new(PyObject::from_string(s.clone())),
-            &Expr::NoneExpr => Rc::new(PyObject::none_obj()),
+            &Expr::NoneExpr => PyObject::none_obj(),
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_add.as_ref().unwrap())(v1, v2)
+                let typ = Rc::clone(v1.ob_type_ref());
+                (typ.tp_fun_add.as_ref().unwrap())(v1, v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_lt.as_ref().unwrap())(v1, v2)
+                let typ = Rc::clone(v1.ob_type_ref());
+                (typ.tp_fun_lt.as_ref().unwrap())(v1, v2)
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                (v1.ob_type().tp_fun_eq.as_ref().unwrap())(v1, v2)
+                let typ = Rc::clone(v1.ob_type_ref());
+                (typ.tp_fun_eq.as_ref().unwrap())(v1, v2)
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -47,12 +50,12 @@ impl Expr {
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match *v1 {
-                    PyObject::ListObj(ref obj) => {
-                        obj.getitem_index(&v2).unwrap()
+                match v1.inner {
+                    PyInnerObject::ListObj(ref _obj) => {
+                        v1.getitem_index(&v2).unwrap()
                     },
-                    PyObject::DictObj(ref obj) => {
-                        obj.lookup(&v2).unwrap()
+                    PyInnerObject::DictObj(ref _obj) => {
+                        v1.lookup(&v2).unwrap()
                     },
                     _ => panic!("Type Error: eval SubscrExpr"),
                 }
@@ -68,31 +71,31 @@ impl Expr {
                     let v2 = e2.eval(Rc::clone(&env));
                     dictobj.update(v1, v2);
                 }
-                Rc::new(dictobj)
+                dictobj
             }
         }
     }
 }
 
 fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
-    match *funv {
-        PyObject::FunObj(ref fun) => {
+    match funv.inner {
+        PyInnerObject::FunObj(ref fun) => {
             match fun.code.exec(Rc::new(Env::new_child(&fun.env, &fun.parms, args))) {
-                CtrlOp::Nop => Rc::new(PyObject::none_obj()),
+                CtrlOp::Nop => PyObject::none_obj(),
                 CtrlOp::Return(val) => val,
                 _ => panic!("Invalid control operator"),
             }
         },
-        PyObject::MethodObj(ref method) => {
+        PyInnerObject::MethodObj(ref method) => {
             let mut vals = vec![Rc::clone(&method.ob_self)];
             vals.append(args);
             match method.code.exec(Rc::new(Env::new_child(&method.env, &method.parms, &vals))) {
-                CtrlOp::Nop => Rc::new(PyObject::none_obj()),
+                CtrlOp::Nop => PyObject::none_obj(),
                 CtrlOp::Return(val) => val,
                 _ => panic!("Invalid control operator"),
             }
         },
-        PyObject::RustFunObj(ref obj) => {
+        PyInnerObject::RustFunObj(ref obj) => {
             match obj.rust_fun {
                 PyRustFun::MethO(ref fun) => {
                     if args.len() != 1 {
@@ -103,17 +106,20 @@ fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
                 }
             }
         },
-        PyObject::TypeObj(ref cls) => {
-            let dictval = Rc::new(PyDictObject::new());
-            let instance = Rc::new(PyObject::InstObj(Rc::new(
-                PyInstObject {
-                    ob_type: Rc::clone(cls),
-                    class: Rc::clone(cls),
-                    dict: dictval,
-                })));
+        PyInnerObject::TypeObj(ref cls) => {
+            let dictobj = PyObject::new_dict();
+            let instance = Rc::new(PyObject {
+                ob_type: Rc::clone(cls),
+                inner: PyInnerObject::InstObj(Rc::new(
+                    PyInstObject {
+                        class: Rc::clone(&funv),
+                        dict: dictobj,
+                    }
+                ))
+            });
             match get_attr(&instance, &"__init__".to_string()) {
                 Some(init_fun) => call_func(Rc::clone(&init_fun), args),
-                None => Rc::new(PyObject::none_obj())
+                None => PyObject::none_obj()
             };
             instance
         },
@@ -122,32 +128,37 @@ fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
 }
 
 fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject> {
-    match *value {
-        PyObject::FunObj(ref fun) => Rc::new(PyObject::MethodObj(Rc::new(
+    match value.inner {
+        PyInnerObject::FunObj(ref fun) => {
             PY_METHOD_TYPE.with(|tp| {
-                PyMethodObject {
+                Rc::new(PyObject {
                     ob_type: Rc::clone(tp),
-                    ob_self: Rc::clone(instance_ref),
-                    env: Rc::clone(&fun.env),
-                    parms: fun.parms.clone(),
-                    code: fun.code.clone(),
-                }
-            })))),
+                    inner: PyInnerObject::MethodObj(Rc::new(
+                        PyMethodObject {
+                            ob_self: Rc::clone(instance_ref),
+                            env: Rc::clone(&fun.env),
+                            parms: fun.parms.clone(),
+                            code: fun.code.clone(),
+                        }
+                    ))
+                })
+            })
+        },
         _ => Rc::clone(&value),
     }
 }
 
 fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
     let keyval = Rc::new(PyObject::from_string(key.clone()));
-    match **value {
-        PyObject::TypeObj(ref typ) => typ.tp_dict_ref().as_ref().unwrap().lookup(&keyval),
-        PyObject::InstObj(ref inst) => {
+    match value.inner {
+        PyInnerObject::TypeObj(ref typ) => typ.tp_dict_ref().as_ref().unwrap().lookup(&keyval),
+        PyInnerObject::InstObj(ref inst) => {
             match inst.dict.lookup(&keyval) {
                 Some(ret_val) => Some(ret_val),
                 None => {
-                    let mro = get_attr(&Rc::new(PyObject::TypeObj(Rc::clone(&inst.class))), &"__mro__".to_string()).unwrap();
-                    match *mro {
-                        PyObject::ListObj(ref obj) => {
+                    let mro = get_attr(&inst.class, &"__mro__".to_string()).unwrap();
+                    match mro.inner {
+                        PyInnerObject::ListObj(ref obj) => {
                             for base in obj.list.borrow().iter() {
                                 match get_attr(base, key) {
                                     Some(ret_val) => return Some(make_method(Rc::clone(&ret_val), &value)),
@@ -168,14 +179,14 @@ fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
 fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     let keyval = Rc::new(PyObject::from_string(key));
     let value = Rc::clone(value);
-    match *value {
-        PyObject::TypeObj(ref typ) => {
+    match value.inner {
+        PyInnerObject::TypeObj(ref typ) => {
             match typ.tp_dict_ref() {
                 &Some(ref dict) => dict.update(keyval, rvalue),
                 &None => panic!("Type Error: update_attr")
             }
         },
-        PyObject::InstObj(ref inst) => {
+        PyInnerObject::InstObj(ref inst) => {
             inst.dict.update(keyval, rvalue);
         },
         _ => panic!("Type Error: update_attr")
@@ -187,7 +198,7 @@ pub fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
         Box::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
     }
 
-pub fn get_wrapped_unaryop(dict: Rc<PyDictObject>, s: &str) ->
+pub fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
     Option<Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
         dict.lookup(&Rc::new(PyObject::from_str(s))).map(unaryop_from_pyobj)
     }
@@ -197,7 +208,7 @@ pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
         Box::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
     }
 
-pub fn get_wrapped_binop(dict: Rc<PyDictObject>, s: &str) ->
+pub fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
     Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
         dict.lookup(&Rc::new(PyObject::from_str(s))).map(binop_from_pyobj)
     }
@@ -323,14 +334,16 @@ impl Executable for CompoundStmt {
                 CtrlOp::Nop
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
-                let funv = PyObject::FunObj(Rc::new(
-                    PY_FUN_TYPE.with(|tp| {
-                        PyFunObject {
-                            ob_type: Rc::clone(&tp),
+                let funv = PY_FUN_TYPE.with(|tp| {
+                    PyObject {
+                        ob_type: Rc::clone(&tp),
+                        inner: PyInnerObject::FunObj(Rc::new(PyFunObject {
                             env: Rc::clone(&env),
                             parms: parms.clone(),
                             code: prog.clone(),
-                        }})));
+                        }))
+                    }
+                });
                 Rc::clone(&env).update(id.clone(), Rc::new(funv));
                 CtrlOp::Nop
             },
@@ -340,7 +353,7 @@ impl Executable for CompoundStmt {
                     CtrlOp::Nop => (),
                     _ => panic!("Runtime Error: Invalid control operator")
                 }
-                let dictobj = Rc::new(new_env.dictobj());
+                let dictobj = new_env.dictobj();
                 let mut cls = PyTypeObject::new_type();
                 cls.tp_dict = Some(Rc::clone(&dictobj));
                 cls.ob_type = PY_TYPE_TYPE.with(|tp|{ Some(Rc::clone(&tp)) });
@@ -355,15 +368,20 @@ impl Executable for CompoundStmt {
                 let mut mro_list = vec![];
                 for base in bases {
                     let pylist = get_attr(&base, &"__mro__".to_string()).unwrap();
-                    match *pylist {
-                        PyObject::ListObj(ref obj) => {
+                    match pylist.inner {
+                        PyInnerObject::ListObj(ref obj) => {
                             mro_list.push(obj.list.borrow().clone());
                         },
                         _ => panic!("Type Error: mro")
                     }
                 }
 
-                let clsobj = Rc::new(PyObject::TypeObj(Rc::new(cls)));
+                let clsobj = Rc::new(PY_TYPE_TYPE.with(|tp| {
+                    PyObject {
+                        ob_type: Rc::clone(&tp),
+                        inner: PyInnerObject::TypeObj(Rc::new(cls))
+                    }
+                }));
                 let mut mro = linearlize(mro_list);
                 mro.insert(0, Rc::clone(&clsobj));
                 update_attr(&clsobj, "__mro__".to_string(), Rc::new(PyObject::from_vec(mro)));

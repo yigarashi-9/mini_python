@@ -1,12 +1,11 @@
 use std::rc::Rc;
 
 use env::Env;
-use object::object::*;
+use object::PyObject;
 use object::typeobj::*;
 use syntax::{Id, Program};
 
 pub struct PyMethodObject {
-    pub ob_type: Rc<PyTypeObject>,
     pub ob_self: Rc<PyObject>,
     pub env: Rc<Env>,
     pub parms: Vec<Id>,

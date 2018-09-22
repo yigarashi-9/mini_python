@@ -1,10 +1,8 @@
 use std::rc::Rc;
 
-use object::typeobj::PyTypeObject;
-use object::dictobj::PyDictObject;
+use object::PyObject;
 
 pub struct PyInstObject {
-    pub ob_type: Rc<PyTypeObject>,
-    pub class: Rc<PyTypeObject>,
-    pub dict: Rc<PyDictObject>,
+    pub class: Rc<PyObject>,
+    pub dict: Rc<PyObject>,
 }

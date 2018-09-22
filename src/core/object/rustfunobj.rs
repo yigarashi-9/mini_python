@@ -1,10 +1,9 @@
 use std::rc::Rc;
 
-use object::object::*;
+use object::PyObject;
 use object::typeobj::*;
 
 pub struct PyRustFunObject {
-    pub ob_type: Rc<PyTypeObject>,
     pub ob_self: Option<Rc<PyTypeObject>>,
     pub rust_fun: PyRustFun,
 }

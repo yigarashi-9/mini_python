@@ -1,19 +1,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use object::object::*;
-use object::typeobj::*;
+use object::{PyObject, PyInnerObject};
+use object::generic::*;
+use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 
 fn list_len(v: Rc<PyObject>) -> Rc<PyObject> {
-    match *v {
-        PyObject::ListObj(ref obj) => Rc::new(PyObject::from_i32(obj.list.borrow().len() as i32)),
+    match v.inner {
+        PyInnerObject::ListObj(ref obj) => Rc::new(PyObject::from_i32(obj.list.borrow().len() as i32)),
         _ => panic!("TypeError: list_len")
     }
 }
 
 fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
-    match *v {
-        PyObject::ListObj(ref obj) => Rc::new(PyObject::from_bool(!(obj.list.borrow().is_empty()))),
+    match v.inner {
+        PyInnerObject::ListObj(ref obj) => Rc::new(PyObject::from_bool(!(obj.list.borrow().is_empty()))),
         _ => panic!("TypeError: list_bool")
     }
 }
@@ -38,26 +39,32 @@ thread_local! (
 );
 
 pub struct PyListObject {
-    pub ob_type: Rc<PyTypeObject>,
     pub list: RefCell<Vec<Rc<PyObject>>>,
 }
 
-impl PyListObject {
-    pub fn from_vec(v: Vec<Rc<PyObject>>) -> PyListObject {
+impl PyObject {
+    pub fn from_vec(v: Vec<Rc<PyObject>>) -> PyObject {
         PY_LIST_TYPE.with(|tp| {
-            PyListObject {
-                ob_type: Rc::clone(&tp),
+            let inner = PyListObject {
                 list: RefCell::new(v.iter().map(|v|{ Rc::clone(&v) }).collect()),
+            };
+            PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::ListObj(Rc::new(inner))
             }
         })
     }
 
     pub fn getitem_index(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
         let key = pyobj_to_i32(Rc::clone(key));
-        print!("{}", key as usize);
-        match self.list.borrow().get(key as usize) {
-            Some(item) => Some(Rc::clone(item)),
-            None => None,
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => {
+                match obj.list.borrow().get(key as usize) {
+                    Some(item) => Some(Rc::clone(item)),
+                    None => None,
+                }
+            },
+            _ => panic!("Type Error: getitem_index")
         }
     }
 }

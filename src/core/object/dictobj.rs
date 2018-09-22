@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use object::object::*;
-use object::typeobj::*;
+use object::{PyObject, PyInnerObject};
+use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 use object::pyhashmap::PyHashMap;
 
 fn dict_len(v: Rc<PyObject>) -> Rc<PyObject> {
-    match *v {
-        PyObject::DictObj(ref obj) => obj.dict.borrow().len(),
+    match v.inner {
+        PyInnerObject::DictObj(ref obj) => obj.dict.borrow().len(),
         _ => panic!("TypeError: dict_len")
     }
 }
@@ -32,28 +32,38 @@ thread_local! (
 );
 
 pub struct PyDictObject {
-    pub ob_type: Rc<PyTypeObject>,
     pub dict: RefCell<PyHashMap>,
 }
 
-impl PyDictObject {
-    pub fn new() -> PyDictObject {
+impl PyObject {
+    pub fn new_dict() -> Rc<PyObject> {
         PY_DICT_TYPE.with(|tp| {
-            PyDictObject {
-                ob_type: Rc::clone(&tp),
+            let inner =  PyDictObject {
                 dict: RefCell::new(PyHashMap::new()),
-            }
+            };
+            Rc::new(PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::DictObj(Rc::new(inner))
+            })
         })
     }
 
     pub fn lookup(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
-        match self.dict.borrow().get(key) {
-            Some(v) => Some(Rc::clone(v)),
-            None => None
+        match self.inner {
+            PyInnerObject::DictObj(ref obj) => {
+                match obj.dict.borrow().get(key) {
+                    Some(v) => Some(Rc::clone(v)),
+                    None => None
+                }
+            },
+            _ => panic!("Type Error: PyObject lookup")
         }
     }
 
     pub fn update(&self, key: Rc<PyObject>, value: Rc<PyObject>) {
-        self.dict.borrow_mut().insert(key, value);
+        match self.inner {
+            PyInnerObject::DictObj(ref obj) => obj.dict.borrow_mut().insert(key, value),
+            _ => panic!("Type Error: PyObject update")
+        }
     }
 }

@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use object::object::PyObject;
-use object::dictobj::PyDictObject;
+use object::PyObject;
 use syntax::Id;
 
 pub struct Env {
@@ -41,8 +40,8 @@ impl Env {
         self.map.borrow_mut().insert(key, val);
     }
 
-    pub fn dictobj(self: &Rc<Env>) -> PyDictObject {
-        let dictobj = PyDictObject::new();
+    pub fn dictobj(self: &Rc<Env>) -> Rc<PyObject> {
+        let dictobj = PyObject::new_dict();
         for (k, v) in self.map.borrow().iter() {
             let key = PyObject::from_string(k.clone());
             dictobj.update(Rc::new(key), Rc::clone(v));

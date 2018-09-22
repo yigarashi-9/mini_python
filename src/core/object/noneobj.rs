@@ -1,10 +1,7 @@
 use std::rc::Rc;
 
+use object::{PyObject, PyInnerObject};
 use object::typeobj::*;
-
-pub struct PyNoneObject {
-    pub ob_type: Rc<PyTypeObject>,
-}
 
 thread_local! (
     pub static PY_NONE_TYPE: Rc<PyTypeObject> = {
@@ -24,3 +21,14 @@ thread_local! (
         })
     }
 );
+
+impl PyObject {
+    pub fn none_obj() -> Rc<PyObject> {
+        PY_NONE_TYPE.with(|tp| {
+            Rc::new(PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::NoneObj
+            })
+        })
+    }
+}

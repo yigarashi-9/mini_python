@@ -2,14 +2,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use object::object::*;
+use object::{PyObject, PyInnerObject};
 use object::typeobj::*;
 
 fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
-    match *lv {
-        PyObject::StrObj(ref l_obj) => {
-            match *rv {
-                PyObject::StrObj(ref r_obj) =>
+    match lv.inner {
+        PyInnerObject::StrObj(ref l_obj) => {
+            match rv.inner {
+                PyInnerObject::StrObj(ref r_obj) =>
                     Rc::new(PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s))),
                 _ => panic!("Type Error: add_str_str"),
             }
@@ -19,10 +19,10 @@ fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
-    match *lv {
-        PyObject::StrObj(ref l_obj) => {
-            match *rv {
-                PyObject::StrObj(ref r_obj) =>
+    match lv.inner {
+        PyInnerObject::StrObj(ref l_obj) => {
+            match rv.inner {
+                PyInnerObject::StrObj(ref r_obj) =>
                     Rc::new(PyObject::from_bool(l_obj.s == r_obj.s)),
                 _ => panic!("Type Error: eq_str_str"),
             }
@@ -33,16 +33,16 @@ fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
 
 fn str_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
-    match *obj {
-        PyObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
+    match obj.inner {
+        PyInnerObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
         _ => panic!("Type Error: str_hash")
     };
     hasher.finish()
 }
 
 fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
-    match *v {
-        PyObject::StrObj(ref obj) => Rc::new(PyObject::from_i32(obj.s.len() as i32)),
+    match v.inner {
+        PyInnerObject::StrObj(ref obj) => Rc::new(PyObject::from_i32(obj.s.len() as i32)),
         _ => panic!("Type Error: str_len")
     }
 }
@@ -67,17 +67,22 @@ thread_local! (
 );
 
 pub struct PyStringObject {
-    pub ob_type: Rc<PyTypeObject>,
     s: String,
 }
 
-impl PyStringObject {
-    pub fn from_string(raw_string: String) -> PyStringObject {
+impl PyObject {
+    pub fn from_str(s: &str) -> PyObject {
+        PyObject::from_string(s.to_string())
+    }
+
+    pub fn from_string(raw_string: String) -> PyObject {
         PY_STRING_TYPE.with(|tp| {
-            PyStringObject {
+            let inner = PyStringObject { s: raw_string };
+            PyObject {
                 ob_type: Rc::clone(&tp),
-                s: raw_string
+                inner: PyInnerObject::StrObj(Rc::new(inner))
             }
+
         })
     }
 }
