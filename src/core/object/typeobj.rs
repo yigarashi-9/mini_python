@@ -20,6 +20,7 @@ pub struct PyTypeObject {
     pub tp_fun_lt: BinaryOp,
     pub tp_len: UnaryOp,
     pub tp_dict: Option<Rc<PyObject>>,
+    pub tp_subclasses: Option<Rc<PyObject>>,
 }
 
 pub fn default_hash(obj: Rc<PyObject>) -> u64 {
@@ -46,6 +47,7 @@ impl PyTypeObject {
             tp_fun_lt: None,
             tp_len: None,
             tp_dict: None,
+            tp_subclasses: None,
         }
     }
 
@@ -53,6 +55,7 @@ impl PyTypeObject {
         &self.tp_dict
     }
 }
+
 
 pub fn pytype_ready(typ: &mut PyTypeObject) {
     if typ.tp_base.is_none() {

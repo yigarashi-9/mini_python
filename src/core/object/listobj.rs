@@ -33,6 +33,7 @@ thread_local! (
                 tp_fun_lt: None,
                 tp_len: Some(Rc::new(list_len)),
                 tp_dict: None,
+                tp_subclasses: None,
             };
             Rc::new(RefCell::new(tp))
         })
@@ -67,5 +68,14 @@ impl PyObject {
             },
             _ => panic!("Type Error: getitem_index")
         }
+    }
+}
+
+pub fn pylist_append(obj: Rc<PyObject>, elm: Rc<PyObject>) {
+    match obj.inner {
+        PyInnerObject::ListObj(ref obj) => {
+            obj.list.borrow_mut().push(Rc::clone(&elm))
+        },
+        _ => panic!("Type Error: pylist_append")
     }
 }

@@ -8,6 +8,7 @@ use object::*;
 use object::funobj::*;
 use object::generic::*;
 use object::instobj::*;
+use object::listobj::*;
 use object::methodobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
@@ -370,7 +371,7 @@ impl Executable for CompoundStmt {
 
                 let bases: Vec<Rc<PyObject>> = bases.iter().map(|e| { e.eval(Rc::clone(&env)) }).collect();
                 let mut mro_list = vec![];
-                for base in bases {
+                for base in &bases {
                     let pylist = get_attr(&base, &"__mro__".to_string()).unwrap();
                     match pylist.inner {
                         PyInnerObject::ListObj(ref obj) => {
@@ -386,9 +387,18 @@ impl Executable for CompoundStmt {
                         inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(cls)))
                     }
                 }));
+
                 let mut mro = linearlize(mro_list);
                 mro.insert(0, Rc::clone(&clsobj));
                 update_attr(&clsobj, "__mro__".to_string(), PyObject::from_vec(mro));
+
+                for base in &bases {
+                    let tp_subclasses = &base.ob_type.borrow().tp_subclasses;
+                    if tp_subclasses.is_some() {
+                        pylist_append(Rc::clone(tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
+                    }
+                }
+
                 env.update(id.clone(), clsobj);
                 CtrlOp::Nop
             }
