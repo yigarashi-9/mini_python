@@ -33,6 +33,8 @@ thread_local! (
                 tp_fun_lt: None,
                 tp_len: Some(Rc::new(list_len)),
                 tp_dict: None,
+                tp_bases: None,
+                tp_mro: None,
                 tp_subclasses: None,
             };
             Rc::new(RefCell::new(tp))
@@ -45,7 +47,7 @@ pub struct PyListObject {
 }
 
 impl PyObject {
-    pub fn from_vec(v: Vec<Rc<PyObject>>) -> Rc<PyObject> {
+    pub fn from_vec(v: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
         PY_LIST_TYPE.with(|tp| {
             let inner = PyListObject {
                 list: RefCell::new(v.iter().map(|v|{ Rc::clone(&v) }).collect()),

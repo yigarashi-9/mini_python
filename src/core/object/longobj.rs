@@ -73,6 +73,8 @@ thread_local! (
                 tp_fun_lt: Some(Rc::new(lt_long_long)),
                 tp_len: None,
                 tp_dict: None,
+                tp_bases: None,
+                tp_mro: None,
                 tp_subclasses: None,
             };
             Rc::new(RefCell::new(tp))

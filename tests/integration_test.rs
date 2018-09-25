@@ -63,7 +63,7 @@ test_cases![
     def, def_argument, def_recursive, def_internal, def_ho, def_lexical_scope,
     class_var, class_instance_var, class_method, assign_attr, class_update, class_init,
     dict_basic,
-    string_add, meta_add,
+    string_add, meta_add, inherit_meta_add,
     list_basic,
     builtin_len,
     inheritance_simple, inheritance_complex,

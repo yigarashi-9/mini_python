@@ -32,7 +32,13 @@ macro_rules! set_builtin_fun {
 
 pub fn load_builtins(env: Rc<Env>) {
     set_builtin_fun!(env, "len", MethO, builtin_len);
-    PY_BOOL_TYPE.with(|tp| {
-        pytype_ready(&mut tp.borrow_mut());
+    PY_TYPE_TYPE.with(|tp| {
+        PY_BOOL_TYPE.with(|booltp| {
+            let typ = Rc::new(PyObject {
+                ob_type: Rc::clone(&tp),
+                inner: PyInnerObject::TypeObj(Rc::clone(&booltp))
+            });
+            pytype_ready(typ)
+        })
     });
 }
