@@ -1,5 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use object::{PyObject, PyInnerObject};
@@ -59,20 +60,21 @@ fn long_bool(v: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 thread_local! (
-    pub static PY_LONG_TYPE: Rc<PyTypeObject> = {
+    pub static PY_LONG_TYPE: Rc<RefCell<PyTypeObject>> = {
         PY_TYPE_TYPE.with(|tp| {
             let tp = PyTypeObject {
                 ob_type: Some(Rc::clone(&tp)),
                 tp_name: "int".to_string(),
-                tp_hash: Some(Box::new(long_hash)),
-                tp_bool: Some(Box::new(long_bool)),
-                tp_fun_eq: Some(Box::new(eq_long_long)),
-                tp_fun_add: Some(Box::new(add_long_long)),
-                tp_fun_lt: Some(Box::new(lt_long_long)),
+                tp_base: None,
+                tp_hash: Some(Rc::new(long_hash)),
+                tp_bool: Some(Rc::new(long_bool)),
+                tp_fun_eq: Some(Rc::new(eq_long_long)),
+                tp_fun_add: Some(Rc::new(add_long_long)),
+                tp_fun_lt: Some(Rc::new(lt_long_long)),
                 tp_len: None,
                 tp_dict: None,
             };
-            Rc::new(tp)
+            Rc::new(RefCell::new(tp))
         })
     }
 );

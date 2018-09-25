@@ -12,9 +12,9 @@ pub mod rustfunobj;
 pub mod strobj;
 pub mod typeobj;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use self::boolobj::PyBoolObject;
 use self::dictobj::PyDictObject;
 use self::funobj::PyFunObject;
 use self::instobj::PyInstObject;
@@ -26,7 +26,6 @@ use self::strobj::PyStringObject;
 use self::typeobj::PyTypeObject;
 
 pub enum PyInnerObject {
-    BoolObj(Rc<PyBoolObject>),
     DictObj(Rc<PyDictObject>),
     FunObj(Rc<PyFunObject>),
     InstObj(Rc<PyInstObject>),
@@ -36,16 +35,16 @@ pub enum PyInnerObject {
     NoneObj,
     RustFunObj(Rc<PyRustFunObject>),
     StrObj(Rc<PyStringObject>),
-    TypeObj(Rc<PyTypeObject>),
+    TypeObj(Rc<RefCell<PyTypeObject>>),
 }
 
 pub struct PyObject {
-    pub ob_type: Rc<PyTypeObject>,
+    pub ob_type: Rc<RefCell<PyTypeObject>>,
     pub inner: PyInnerObject,
 }
 
 impl PyObject {
-    pub fn ob_type_ref(&self) -> &Rc<PyTypeObject> {
+    pub fn ob_type_ref(&self) -> &Rc<RefCell<PyTypeObject>> {
         &self.ob_type
     }
 }

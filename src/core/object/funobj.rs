@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use env::Env;
@@ -11,12 +12,13 @@ pub struct PyFunObject {
 }
 
 thread_local! (
-    pub static PY_FUN_TYPE: Rc<PyTypeObject> = {
+    pub static PY_FUN_TYPE: Rc<RefCell<PyTypeObject>> = {
         PY_TYPE_TYPE.with(|tp| {
             let tp =  PyTypeObject {
                 ob_type: Some(Rc::clone(&tp)),
                 tp_name: "function".to_string(),
-                tp_hash: Some(Box::new(default_hash)),
+                tp_base: None,
+                tp_hash: Some(Rc::new(default_hash)),
                 tp_bool: None,
                 tp_fun_eq: None,
                 tp_fun_add: None,
@@ -24,7 +26,7 @@ thread_local! (
                 tp_len: None,
                 tp_dict: None,
             };
-            Rc::new(tp)
+            Rc::new(RefCell::new(tp))
         })
     }
 );

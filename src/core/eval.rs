@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use syntax::*;
@@ -24,19 +25,22 @@ impl Expr {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
                 let typ = Rc::clone(v1.ob_type_ref());
-                (typ.tp_fun_add.as_ref().unwrap())(v1, v2)
+                let typ_borrowed = typ.borrow();
+                (typ_borrowed.tp_fun_add.as_ref().unwrap())(v1, v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
                 let typ = Rc::clone(v1.ob_type_ref());
-                (typ.tp_fun_lt.as_ref().unwrap())(v1, v2)
+                let typ_borrowed = typ.borrow();
+                (typ_borrowed.tp_fun_lt.as_ref().unwrap())(v1, v2)
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
                 let typ = Rc::clone(v1.ob_type_ref());
-                (typ.tp_fun_eq.as_ref().unwrap())(v1, v2)
+                let typ_borrowed = typ.borrow();
+                (typ_borrowed.tp_fun_eq.as_ref().unwrap())(v1, v2)
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -151,7 +155,7 @@ fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject>
 fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
     let keyval = Rc::new(PyObject::from_string(key.clone()));
     match value.inner {
-        PyInnerObject::TypeObj(ref typ) => typ.tp_dict_ref().as_ref().unwrap().lookup(&keyval),
+        PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict_ref().as_ref().unwrap().lookup(&keyval),
         PyInnerObject::InstObj(ref inst) => {
             match inst.dict.lookup(&keyval) {
                 Some(ret_val) => Some(ret_val),
@@ -181,7 +185,7 @@ fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     let value = Rc::clone(value);
     match value.inner {
         PyInnerObject::TypeObj(ref typ) => {
-            match typ.tp_dict_ref() {
+            match typ.borrow().tp_dict_ref() {
                 &Some(ref dict) => dict.update(keyval, rvalue),
                 &None => panic!("Type Error: update_attr")
             }
@@ -194,22 +198,22 @@ fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
 }
 
 pub fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
-    Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>> {
-        Box::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
+    Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>> {
+        Rc::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
     }
 
 pub fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
-    Option<Box<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
+    Option<Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
         dict.lookup(&PyObject::from_str(s)).map(unaryop_from_pyobj)
     }
 
 pub fn binop_from_pyobj(obj: Rc<PyObject>) ->
-    Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
-        Box::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
+    Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
+        Rc::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
     }
 
 pub fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
-    Option<Box<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
+    Option<Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
         dict.lookup(&PyObject::from_str(s)).map(binop_from_pyobj)
     }
 
@@ -379,7 +383,7 @@ impl Executable for CompoundStmt {
                 let clsobj = Rc::new(PY_TYPE_TYPE.with(|tp| {
                     PyObject {
                         ob_type: Rc::clone(&tp),
-                        inner: PyInnerObject::TypeObj(Rc::new(cls))
+                        inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(cls)))
                     }
                 }));
                 let mut mro = linearlize(mro_list);

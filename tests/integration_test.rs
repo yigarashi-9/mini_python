@@ -66,5 +66,6 @@ test_cases![
     string_add, meta_add,
     list_basic,
     builtin_len,
-    inheritance_simple, inheritance_complex
+    inheritance_simple, inheritance_complex,
+    bool_arith
 ];

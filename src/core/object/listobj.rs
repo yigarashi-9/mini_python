@@ -20,20 +20,21 @@ fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 thread_local! (
-    pub static PY_LIST_TYPE: Rc<PyTypeObject> = {
+    pub static PY_LIST_TYPE: Rc<RefCell<PyTypeObject>> = {
         PY_TYPE_TYPE.with(|tp| {
             let tp = PyTypeObject {
                 ob_type: Some(Rc::clone(&tp)),
                 tp_name: "list".to_string(),
+                tp_base: None,
                 tp_hash: None,
-                tp_bool: Some(Box::new(list_bool)),
+                tp_bool: Some(Rc::new(list_bool)),
                 tp_fun_eq: None,
                 tp_fun_add: None,
                 tp_fun_lt: None,
-                tp_len: Some(Box::new(list_len)),
+                tp_len: Some(Rc::new(list_len)),
                 tp_dict: None,
             };
-            Rc::new(tp)
+            Rc::new(RefCell::new(tp))
         })
     }
 );
