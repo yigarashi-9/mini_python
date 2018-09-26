@@ -40,7 +40,7 @@ pub struct PyDictObject {
 }
 
 impl PyObject {
-    pub fn new_dict() -> Rc<PyObject> {
+    pub fn pydict_new() -> Rc<PyObject> {
         PY_DICT_TYPE.with(|tp| {
             let inner =  PyDictObject {
                 dict: RefCell::new(PyHashMap::new()),
@@ -52,7 +52,11 @@ impl PyObject {
         })
     }
 
-    pub fn lookup(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
+    pub fn pydict_check(&self) -> bool {
+        PY_DICT_TYPE.with(|tp| { &self.ob_type == tp })
+    }
+
+    pub fn pydict_lookup(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::DictObj(ref obj) => {
                 match obj.dict.borrow().get(key) {
@@ -64,7 +68,7 @@ impl PyObject {
         }
     }
 
-    pub fn update(&self, key: Rc<PyObject>, value: Rc<PyObject>) {
+    pub fn pydict_update(&self, key: Rc<PyObject>, value: Rc<PyObject>) {
         match self.inner {
             PyInnerObject::DictObj(ref obj) => obj.dict.borrow_mut().insert(key, value),
             _ => panic!("Type Error: PyObject update")

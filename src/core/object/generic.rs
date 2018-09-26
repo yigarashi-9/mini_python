@@ -75,7 +75,7 @@ pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObjec
             }
         },
         PyInnerObject::TypeObj(ref cls) => {
-            let dictobj = PyObject::new_dict();
+            let dictobj = PyObject::pydict_new();
             let instance = Rc::new(PyObject {
                 ob_type: Rc::clone(cls),
                 inner: PyInnerObject::InstObj(Rc::new(
@@ -119,9 +119,9 @@ pub fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObj
 pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
     let keyval = Rc::new(PyObject::from_string(key.clone()));
     match value.inner {
-        PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict_ref().as_ref().unwrap().lookup(&keyval),
+        PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict_ref().as_ref().unwrap().pydict_lookup(&keyval),
         PyInnerObject::InstObj(ref inst) => {
-            match inst.dict.lookup(&keyval) {
+            match inst.dict.pydict_lookup(&keyval) {
                 Some(ret_val) => Some(ret_val),
                 None => {
                     if let Some(ref mro) = inst.class.pytype_tp_mro() {
@@ -146,13 +146,13 @@ pub fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     match value.inner {
         PyInnerObject::TypeObj(ref typ) => {
             match typ.borrow().tp_dict_ref() {
-                &Some(ref dict) => dict.update(Rc::clone(&keyval), Rc::clone(&rvalue)),
+                &Some(ref dict) => dict.pydict_update(Rc::clone(&keyval), Rc::clone(&rvalue)),
                 &None => panic!("Type Error: update_attr")
             }
             update_slot(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
         },
         PyInnerObject::InstObj(ref inst) => {
-            inst.dict.update(keyval, rvalue);
+            inst.dict.pydict_update(keyval, rvalue);
         },
         _ => panic!("Type Error: update_attr")
     }

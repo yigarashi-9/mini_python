@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -34,10 +34,38 @@ impl PartialEq for PyTypeObject {
 }
 
 impl PyObject {
+    pub fn pytype_typeobj_borrow(&self) -> Ref<PyTypeObject> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow(),
+            _ => panic!("Type Error: pytype_inner")
+        }
+    }
+
+    pub fn pytype_typeobj_borrow_mut(&self) -> RefMut<PyTypeObject> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow_mut(),
+            _ => panic!("Type Error: pytype_inner")
+        }
+    }
+
+    pub fn pytype_tp_dict(&self) -> Option<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict.clone(),
+            _ => panic!("Type Error: pytype_tp_dict")
+        }
+    }
+
+    pub fn pytype_tp_base(&self) -> Option<Rc<RefCell<PyTypeObject>>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_base.clone(),
+            _ => panic!("Type Error: pytype_tp_base")
+        }
+    }
+
     pub fn pytype_tp_bases(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_bases.clone(),
-            _ => panic!("Type Error: pytype_tp_mro")
+            _ => panic!("Type Error: pytype_tp_bases")
         }
     }
 
@@ -142,7 +170,7 @@ fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
 
 fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
     Option<Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.lookup(&PyObject::from_str(s)).map(unaryop_from_pyobj)
+        dict.pydict_lookup(&PyObject::from_str(s)).map(unaryop_from_pyobj)
     }
 
 fn binop_from_pyobj(obj: Rc<PyObject>) ->
@@ -152,7 +180,7 @@ fn binop_from_pyobj(obj: Rc<PyObject>) ->
 
 fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
     Option<Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.lookup(&PyObject::from_str(s)).map(binop_from_pyobj)
+        dict.pydict_lookup(&PyObject::from_str(s)).map(binop_from_pyobj)
     }
 
 fn inherit_method(typ: &mut PyTypeObject, base: &PyTypeObject) {
@@ -190,79 +218,55 @@ fn update_slot_subclasses(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
 }
 
 pub fn update_slot(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
-    match value.inner {
-        PyInnerObject::TypeObj(ref typ) => {
-
-            {
-                let mut typ = typ.borrow_mut();
-
-                if key == "__add__".to_string() {
-                    typ.tp_fun_add = Some(binop_from_pyobj(Rc::clone(&rvalue)));
-                } else if key == "__bool__".to_string() {
-                    typ.tp_bool = Some(unaryop_from_pyobj(Rc::clone(&rvalue)));
-                } else if key == "__lt__".to_string() {
-                    typ.tp_fun_lt = Some(binop_from_pyobj(Rc::clone(&rvalue)));
-                } else if key == "__eq__".to_string() {
-                    typ.tp_fun_eq = Some(binop_from_pyobj(Rc::clone(&rvalue)));
-                }
-            }
-
-            update_slot_subclasses(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
-        },
-        _ => panic!("Type Error: update_slot")
+    {
+        let mut  typ = value.pytype_typeobj_borrow_mut();
+        if key == "__add__".to_string() {
+            typ.tp_fun_add = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+        } else if key == "__bool__".to_string() {
+            typ.tp_bool = Some(unaryop_from_pyobj(Rc::clone(&rvalue)));
+        } else if key == "__lt__".to_string() {
+            typ.tp_fun_lt = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+        } else if key == "__eq__".to_string() {
+            typ.tp_fun_eq = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+        }
     }
+    update_slot_subclasses(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
 }
 
 pub fn pytype_ready(obj: Rc<PyObject>) {
-    let obj_cloned = Rc::clone(&obj);
-    match obj_cloned.inner {
-        PyInnerObject::TypeObj(ref typ) => {
-            let mut mro: Vec<Rc<PyObject>> = vec![];
-            let bases = typ.borrow().tp_bases.clone();
-            if let Some(ref bases) = bases {
-                let mut mro_list = vec![];
-                if !(bases.pylist_check()) { panic!("Type Error: pytype_ready") }
-                for i in 0..(bases.pylist_size()) {
-                    if let Some(mro) = bases.pylist_getitem(i).pytype_tp_mro() {
-                        mro_list.push(mro.pylist_clone());
-                    }
-                }
-                mro = linearlize(mro_list);
-                mro.insert(0, Rc::clone(&obj));
-                let mro_obj = PyObject::pylist_from_vec(&mro);
-                typ.borrow_mut().tp_mro = Some(Rc::clone(&mro_obj));
-                update_attr(&obj, "__mro__".to_string(), mro_obj);
+    let mut mro: Vec<Rc<PyObject>> = vec![];
+    if let Some(ref bases) = obj.pytype_tp_bases() {
+        let mut mro_list = vec![];
+        if !(bases.pylist_check()) { panic!("Type Error: pytype_ready") }
+        for i in 0..(bases.pylist_size()) {
+            if let Some(mro) = bases.pylist_getitem(i).pytype_tp_mro() {
+                mro_list.push(mro.pylist_clone());
             }
+        }
+        mro = linearlize(mro_list);
+        mro.insert(0, Rc::clone(&obj));
+        let mro_obj = PyObject::pylist_from_vec(&mro);
+        obj.pytype_typeobj_borrow_mut().tp_mro = Some(Rc::clone(&mro_obj));
+        update_attr(&obj, "__mro__".to_string(), mro_obj);
+    }
 
+    if let Some(ref dictobj) = obj.pytype_tp_dict() {
+        let mut typ = obj.pytype_typeobj_borrow_mut();
+        typ.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
+        typ.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
+        typ.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
+        typ.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
+        typ.tp_len = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__");
+    }
 
-            if typ.borrow().tp_dict.is_some() {
-                let mut typ = typ.borrow_mut();
-                let dictobj = Rc::clone(typ.tp_dict.as_ref().unwrap());
-                typ.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
-                typ.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
-                typ.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
-                typ.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
-                typ.tp_len = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__");
-            }
+    if let Some(ref base) = obj.pytype_tp_base() {
+        inherit_method(&mut obj.pytype_typeobj_borrow_mut(), &base.borrow());
+    }
 
-            if typ.borrow().tp_base.is_some() {
-                let mut typ = typ.borrow_mut();
-                let tp_base = Rc::clone(typ.tp_base.as_ref().unwrap());
-                inherit_method(&mut typ, &tp_base.borrow());
-            }
-
-            if mro.len() >= 1 {
-                for base in &mro[1..] {
-                    let mut typ = typ.borrow_mut();
-                    match base.inner {
-                        PyInnerObject::TypeObj(ref obj) => {
-                            inherit_method(&mut typ, &obj.borrow())
-                        },
-                        _ => panic!("Type Error: pytype_ready")
-                    }
-                }
-            }
-        },
-        _ => panic!("Type Error: pytype_ready"),
+    if mro.len() >= 1 {
+        for base in &mro[1..] {
+            inherit_method(&mut obj.pytype_typeobj_borrow_mut(),
+                           &base.pytype_typeobj_borrow())
+        }
     }
 }

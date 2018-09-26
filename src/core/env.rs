@@ -41,10 +41,10 @@ impl Env {
     }
 
     pub fn dictobj(self: &Rc<Env>) -> Rc<PyObject> {
-        let dictobj = PyObject::new_dict();
+        let dictobj = PyObject::pydict_new();
         for (k, v) in self.map.borrow().iter() {
             let key = PyObject::from_string(k.clone());
-            dictobj.update(key, Rc::clone(v));
+            dictobj.pydict_update(key, Rc::clone(v));
         }
         dictobj
     }

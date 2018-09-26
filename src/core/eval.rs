@@ -52,14 +52,12 @@ impl Expr {
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                match v1.inner {
-                    PyInnerObject::ListObj(ref _obj) => {
-                        v1.pylist_getitem(pyobj_to_i32(v2) as usize)
-                    },
-                    PyInnerObject::DictObj(ref _obj) => {
-                        v1.lookup(&v2).unwrap()
-                    },
-                    _ => panic!("Type Error: eval SubscrExpr"),
+                if v1.pylist_check() {
+                    v1.pylist_getitem(pyobj_to_i32(v2) as usize)
+                } else if v1.pydict_check() {
+                    v1.pydict_lookup(&v2).unwrap()
+                } else {
+                    panic!("Type Error: eval SubscrExpr")
                 }
             },
             &Expr::ListExpr(ref cl) => {
@@ -67,11 +65,11 @@ impl Expr {
                 PyObject::pylist_from_vec(&v)
             },
             &Expr::DictExpr(ref pl) => {
-                let mut dictobj = PyObject::new_dict();
+                let mut dictobj = PyObject::pydict_new();
                 for (e1, e2) in pl {
                     let v1 = e1.eval(Rc::clone(&env));
                     let v2 = e2.eval(Rc::clone(&env));
-                    dictobj.update(v1, v2);
+                    dictobj.pydict_update(v1, v2);
                 }
                 dictobj
             }
@@ -112,7 +110,7 @@ impl Executable for SimpleStmt {
                         let rv = rexpr.eval(Rc::clone(&env));
                         let v1 = e1.eval(Rc::clone(&env));
                         let v2 = e2.eval(Rc::clone(&env));
-                        v1.update(v2, rv);
+                        v1.pydict_update(v2, rv);
                     },
                 };
                 CtrlOp::Nop
@@ -191,16 +189,11 @@ impl Executable for CompoundStmt {
                 }));
 
                 for base in &bases {
-                    match base.inner {
-                        PyInnerObject::TypeObj(ref typ) => {
-                            let mut typ = typ.borrow_mut();
-                            if typ.tp_subclasses.is_none() {
-                                typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
-                            }
-                            pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
-                        },
-                        _ => panic!("Type Error: eval")
+                    let mut typ = base.pytype_typeobj_borrow_mut();
+                    if typ.tp_subclasses.is_none() {
+                        typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
                     }
+                    pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
                 }
 
                 pytype_ready(Rc::clone(&clsobj));
