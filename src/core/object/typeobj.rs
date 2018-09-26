@@ -27,6 +27,35 @@ pub struct PyTypeObject {
     pub tp_subclasses: Option<Rc<PyObject>>,
 }
 
+impl PartialEq for PyTypeObject {
+    fn eq(&self, other: &PyTypeObject) -> bool {
+        self as *const _ == other as *const _
+    }
+}
+
+impl PyObject {
+    pub fn pytype_tp_bases(&self) -> Option<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_bases.clone(),
+            _ => panic!("Type Error: pytype_tp_mro")
+        }
+    }
+
+    pub fn pytype_tp_mro(&self) -> Option<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_mro.clone(),
+            _ => panic!("Type Error: pytype_tp_mro")
+        }
+    }
+
+    pub fn pytype_tp_subclasses(&self) -> Option<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_subclasses.clone(),
+            _ => panic!("Type Error: pytype_tp_subclasses")
+        }
+    }
+}
+
 pub fn default_hash(obj: Rc<PyObject>) -> u64 {
     let mut hasher = DefaultHasher::new();
     (&*obj as *const PyObject).hash(&mut hasher);
@@ -149,24 +178,15 @@ fn inherit_method(typ: &mut PyTypeObject, base: &PyTypeObject) {
 }
 
 fn update_slot_subclasses(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
-    match value.inner {
-        PyInnerObject::TypeObj(ref typ) => {
-            if let Some(ref subclasses) = typ.borrow().tp_subclasses {
-                match subclasses.inner {
-                    PyInnerObject::ListObj(ref obj) => {
-                        for subclass in obj.list.borrow().iter() {
-                            if get_attr(subclass, &key).is_none() {
-                                update_slot(Rc::clone(&subclass), key.clone(), Rc::clone(&rvalue));
-                            }
-                        }
-                    },
-                    _ => panic!("Type Error: updat_slot_subclasses")
-                }
+    if let Some(ref subclasses) = value.pytype_tp_subclasses() {
+        if !subclasses.pylist_check() { panic!("Type Error: updat_slot_subclasses") }
+        for i in 0..(subclasses.pylist_size()) {
+            let subclass = subclasses.pylist_getitem(i);
+            if get_attr(&subclass, &key).is_none() {
+                update_slot(Rc::clone(&subclass), key.clone(), Rc::clone(&rvalue));
             }
-        },
-        _ => panic!("Type Error: update_slot_subclasses")
+        }
     }
-
 }
 
 pub fn update_slot(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
@@ -198,27 +218,22 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
     match obj_cloned.inner {
         PyInnerObject::TypeObj(ref typ) => {
             let mut mro: Vec<Rc<PyObject>> = vec![];
-
-            if typ.borrow().tp_bases.is_some() {
+            let bases = typ.borrow().tp_bases.clone();
+            if let Some(ref bases) = bases {
                 let mut mro_list = vec![];
-                match typ.borrow().tp_bases.as_ref().unwrap().inner {
-                    PyInnerObject::ListObj(ref obj) => {
-                        for base in obj.list.borrow().iter() {
-                            let pylist = get_attr(&base, &"__mro__".to_string()).unwrap();
-                            match pylist.inner {
-                                PyInnerObject::ListObj(ref obj) => {
-                                    mro_list.push(obj.list.borrow().clone());
-                                },
-                                _ => panic!("pytype_ready")
-                            }
-                        }
-                    },
-                    _ => panic!("Type Error: pytype_ready tp_bases"),
+                if !(bases.pylist_check()) { panic!("Type Error: pytype_ready") }
+                for i in 0..(bases.pylist_size()) {
+                    if let Some(mro) = bases.pylist_getitem(i).pytype_tp_mro() {
+                        mro_list.push(mro.pylist_clone());
+                    }
                 }
                 mro = linearlize(mro_list);
                 mro.insert(0, Rc::clone(&obj));
-                update_attr(&obj, "__mro__".to_string(), PyObject::from_vec(&mro));
+                let mro_obj = PyObject::pylist_from_vec(&mro);
+                typ.borrow_mut().tp_mro = Some(Rc::clone(&mro_obj));
+                update_attr(&obj, "__mro__".to_string(), mro_obj);
             }
+
 
             if typ.borrow().tp_dict.is_some() {
                 let mut typ = typ.borrow_mut();

@@ -124,19 +124,15 @@ pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
             match inst.dict.lookup(&keyval) {
                 Some(ret_val) => Some(ret_val),
                 None => {
-                    let mro = get_attr(&inst.class, &"__mro__".to_string()).unwrap();
-                    match mro.inner {
-                        PyInnerObject::ListObj(ref obj) => {
-                            for base in obj.list.borrow().iter() {
-                                match get_attr(base, key) {
-                                    Some(ret_val) => return Some(make_method(Rc::clone(&ret_val), &value)),
-                                    None => continue,
-                                }
-                            };
-                            None
-                        },
-                        _ => panic!("Internal Error: get_attr mro"),
-                    }
+                    if let Some(ref mro) = inst.class.pytype_tp_mro() {
+                        if !(mro.pylist_check()) { return None }
+                        for i in 0..(mro.pylist_size()) {
+                            if let Some(ret_val) = get_attr(&mro.pylist_getitem(i), key) {
+                                return Some(make_method(Rc::clone(&ret_val), &value))
+                            }
+                        }
+                    };
+                    None
                 }
             }
         },

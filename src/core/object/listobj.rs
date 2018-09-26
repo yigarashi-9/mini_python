@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use object::{PyObject, PyInnerObject};
-use object::generic::*;
 use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 
 fn list_len(v: Rc<PyObject>) -> Rc<PyObject> {
@@ -43,11 +42,11 @@ thread_local! (
 );
 
 pub struct PyListObject {
-    pub list: RefCell<Vec<Rc<PyObject>>>,
+    list: RefCell<Vec<Rc<PyObject>>>,
 }
 
 impl PyObject {
-    pub fn from_vec(v: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+    pub fn pylist_from_vec(v: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
         PY_LIST_TYPE.with(|tp| {
             let inner = PyListObject {
                 list: RefCell::new(v.iter().map(|v|{ Rc::clone(&v) }).collect()),
@@ -59,18 +58,40 @@ impl PyObject {
         })
     }
 
-    pub fn getitem_index(&self, key: &Rc<PyObject>) -> Option<Rc<PyObject>> {
-        let key = pyobj_to_i32(Rc::clone(key));
+    pub fn pylist_check(&self) -> bool {
+        PY_LIST_TYPE.with(|tp| { &self.ob_type == tp })
+    }
+
+    pub fn pylist_getitem(&self, index: usize) -> Rc<PyObject> {
         match self.inner {
             PyInnerObject::ListObj(ref obj) => {
-                match obj.list.borrow().get(key as usize) {
-                    Some(item) => Some(Rc::clone(item)),
-                    None => None,
+                match obj.list.borrow().get(index) {
+                    Some(item) => Rc::clone(item),
+                    None => panic!("Out of range Error: pylist_getitem")
                 }
             },
-            _ => panic!("Type Error: getitem_index")
+            _ => panic!("Type Error: pylist_getitem")
         }
     }
+
+    pub fn pylist_size(&self) -> usize {
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => {
+                obj.list.borrow().len()
+            },
+            _ => panic!("Type Error: pylist_size")
+        }
+    }
+
+    pub fn pylist_clone(&self) -> Vec<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => {
+                obj.list.borrow().clone()
+            },
+            _ => panic!("Type Error: pylist_clone")
+        }
+    }
+
 }
 
 pub fn pylist_append(obj: Rc<PyObject>, elm: Rc<PyObject>) {

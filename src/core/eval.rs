@@ -54,7 +54,7 @@ impl Expr {
                 let v2 = e2.eval(Rc::clone(&env));
                 match v1.inner {
                     PyInnerObject::ListObj(ref _obj) => {
-                        v1.getitem_index(&v2).unwrap()
+                        v1.pylist_getitem(pyobj_to_i32(v2) as usize)
                     },
                     PyInnerObject::DictObj(ref _obj) => {
                         v1.lookup(&v2).unwrap()
@@ -64,7 +64,7 @@ impl Expr {
             },
             &Expr::ListExpr(ref cl) => {
                 let v: Vec<Rc<PyObject>> = cl.iter().map(|e|{ e.eval(Rc::clone(&env)) }).collect();
-                PyObject::from_vec(&v)
+                PyObject::pylist_from_vec(&v)
             },
             &Expr::DictExpr(ref pl) => {
                 let mut dictobj = PyObject::new_dict();
@@ -181,7 +181,7 @@ impl Executable for CompoundStmt {
                 cls.tp_dict = Some(Rc::clone(&dictobj));
                 cls.ob_type = PY_TYPE_TYPE.with(|tp|{ Some(Rc::clone(&tp)) });
                 cls.tp_name = id.clone();
-                cls.tp_bases = Some(PyObject::from_vec(&bases));
+                cls.tp_bases = Some(PyObject::pylist_from_vec(&bases));
 
                 let clsobj = Rc::new(PY_TYPE_TYPE.with(|tp| {
                     PyObject {
@@ -195,7 +195,7 @@ impl Executable for CompoundStmt {
                         PyInnerObject::TypeObj(ref typ) => {
                             let mut typ = typ.borrow_mut();
                             if typ.tp_subclasses.is_none() {
-                                typ.tp_subclasses = Some(PyObject::from_vec(&vec![]));
+                                typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
                             }
                             pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
                         },
