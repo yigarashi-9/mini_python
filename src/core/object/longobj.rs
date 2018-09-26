@@ -60,24 +60,24 @@ fn long_bool(v: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 thread_local! (
-    pub static PY_LONG_TYPE: Rc<RefCell<PyTypeObject>> = {
-        PY_TYPE_TYPE.with(|tp| {
-            let tp = PyTypeObject {
-                ob_type: Some(Rc::clone(&tp)),
-                tp_name: "int".to_string(),
-                tp_base: None,
-                tp_hash: Some(Rc::new(long_hash)),
-                tp_bool: Some(Rc::new(long_bool)),
-                tp_fun_eq: Some(Rc::new(eq_long_long)),
-                tp_fun_add: Some(Rc::new(add_long_long)),
-                tp_fun_lt: Some(Rc::new(lt_long_long)),
-                tp_len: None,
-                tp_dict: None,
-                tp_bases: None,
-                tp_mro: None,
-                tp_subclasses: None,
-            };
-            Rc::new(RefCell::new(tp))
+    pub static PY_LONG_TYPE: Rc<PyObject> = {
+        let longtp = PyTypeObject {
+            tp_name: "int".to_string(),
+            tp_base: None,
+            tp_hash: Some(Rc::new(long_hash)),
+            tp_bool: Some(Rc::new(long_bool)),
+            tp_fun_eq: Some(Rc::new(eq_long_long)),
+            tp_fun_add: Some(Rc::new(add_long_long)),
+            tp_fun_lt: Some(Rc::new(lt_long_long)),
+            tp_len: None,
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(longtp))),
         })
     }
 );
@@ -91,7 +91,7 @@ impl PyObject {
         PY_LONG_TYPE.with(|tp| {
             let inner = PyLongObject { n: raw_i32 };
             Rc::new(PyObject {
-                ob_type: Rc::clone(&tp),
+                ob_type: Some(Rc::clone(&tp)),
                 inner: PyInnerObject::LongObj(Rc::new(inner))
             })
         })

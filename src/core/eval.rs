@@ -1,11 +1,9 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use syntax::*;
 use env::*;
 
 use object::*;
-use object::funobj::*;
 use object::generic::*;
 use object::listobj::*;
 use object::typeobj::*;
@@ -22,23 +20,23 @@ impl Expr {
             &Expr::AddExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                let typ = Rc::clone(v1.ob_type_ref());
-                let typ_borrowed = typ.borrow();
-                (typ_borrowed.tp_fun_add.as_ref().expect("Add"))(v1, v2)
+                let ob_type = v1.ob_type();
+                let typ = ob_type.pytype_typeobj_borrow();
+                (typ.tp_fun_add.as_ref().expect("Add"))(v1, v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                let typ = Rc::clone(v1.ob_type_ref());
-                let typ_borrowed = typ.borrow();
-                (typ_borrowed.tp_fun_lt.as_ref().unwrap())(v1, v2)
+                let ob_type = v1.ob_type();
+                let typ = ob_type.pytype_typeobj_borrow();
+                (typ.tp_fun_lt.as_ref().unwrap())(v1, v2)
             },
             &Expr::EqEqExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
                 let v2 = e2.eval(Rc::clone(&env));
-                let typ = Rc::clone(v1.ob_type_ref());
-                let typ_borrowed = typ.borrow();
-                (typ_borrowed.tp_fun_eq.as_ref().unwrap())(v1, v2)
+                let ob_type = v1.ob_type();
+                let typ = ob_type.pytype_typeobj_borrow();
+                (typ.tp_fun_eq.as_ref().unwrap())(v1, v2)
             },
             &Expr::CallExpr(ref fun, ref args) => {
                 let funv = fun.eval(Rc::clone(&env));
@@ -153,17 +151,8 @@ impl Executable for CompoundStmt {
                 CtrlOp::Nop
             }
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
-                let funv = PY_FUN_TYPE.with(|tp| {
-                    PyObject {
-                        ob_type: Rc::clone(&tp),
-                        inner: PyInnerObject::FunObj(Rc::new(PyFunObject {
-                            env: Rc::clone(&env),
-                            parms: parms.clone(),
-                            code: prog.clone(),
-                        }))
-                    }
-                });
-                Rc::clone(&env).update(id.clone(), Rc::new(funv));
+                let funv = PyObject::pyfun_new(&env, parms, prog);
+                Rc::clone(&env).update(id.clone(), funv);
                 CtrlOp::Nop
             },
             &CompoundStmt::ClassStmt(ref id, ref bases, ref prog) => {
@@ -175,29 +164,24 @@ impl Executable for CompoundStmt {
                 let dictobj = new_env.dictobj();
                 let bases: Vec<Rc<PyObject>> = bases.iter().map(|e| { e.eval(Rc::clone(&env)) }).collect();
 
-                let mut cls = PyTypeObject::new_type();
-                cls.tp_dict = Some(Rc::clone(&dictobj));
-                cls.ob_type = PY_TYPE_TYPE.with(|tp|{ Some(Rc::clone(&tp)) });
-                cls.tp_name = id.clone();
-                cls.tp_bases = Some(PyObject::pylist_from_vec(&bases));
-
-                let clsobj = Rc::new(PY_TYPE_TYPE.with(|tp| {
-                    PyObject {
-                        ob_type: Rc::clone(&tp),
-                        inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(cls)))
-                    }
-                }));
+                let cls = PyObject::pytype_new();
+                {
+                    let mut typ = cls.pytype_typeobj_borrow_mut();
+                    typ.tp_dict = Some(Rc::clone(&dictobj));
+                    typ.tp_name = id.clone();
+                    typ.tp_bases = Some(PyObject::pylist_from_vec(&bases));
+                }
 
                 for base in &bases {
                     let mut typ = base.pytype_typeobj_borrow_mut();
                     if typ.tp_subclasses.is_none() {
                         typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
                     }
-                    pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
+                    pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&cls));
                 }
 
-                pytype_ready(Rc::clone(&clsobj));
-                env.update(id.clone(), clsobj);
+                pytype_ready(Rc::clone(&cls));
+                env.update(id.clone(), cls);
                 CtrlOp::Nop
             }
         }

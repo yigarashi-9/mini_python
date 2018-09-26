@@ -8,7 +8,9 @@ use object::rustfunobj::*;
 use object::typeobj::*;
 
 fn builtin_len(obj: Rc<PyObject>) -> Rc<PyObject> {
-    match obj.ob_type.borrow().tp_len {
+    let ob_type = obj.ob_type();
+    let typ = ob_type.pytype_typeobj_borrow();
+    match typ.tp_len {
         Some(ref fun) => (*fun)(Rc::clone(&obj)),
         None => panic!("Type Error: builtin_len"),
     }
@@ -16,29 +18,19 @@ fn builtin_len(obj: Rc<PyObject>) -> Rc<PyObject> {
 
 macro_rules! set_builtin_fun {
     ($env:expr, $id:expr, $flag:ident, $fun:ident) => {
-        PY_RUSTFUN_TYPE.with(|tp| {
-            let inner = PyRustFunObject {
-                ob_self: None,
-                rust_fun: PyRustFun::$flag(Rc::new($fun))
-            };
-            let obj = Rc::new(PyObject {
-                ob_type: Rc::clone(&tp),
-                inner: PyInnerObject::RustFunObj(Rc::new(inner))
-            });
-            $env.update($id.to_string(), obj);
-        })
+        let inner = PyRustFunObject {
+            ob_self: None,
+            rust_fun: PyRustFun::$flag(Rc::new($fun))
+        };
+        let obj = Rc::new(PyObject {
+            ob_type: PY_RUSTFUN_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            inner: PyInnerObject::RustFunObj(Rc::new(inner))
+        });
+        $env.update($id.to_string(), obj);
     }
 }
 
 pub fn load_builtins(env: Rc<Env>) {
     set_builtin_fun!(env, "len", MethO, builtin_len);
-    PY_TYPE_TYPE.with(|tp| {
-        PY_BOOL_TYPE.with(|booltp| {
-            let typ = Rc::new(PyObject {
-                ob_type: Rc::clone(&tp),
-                inner: PyInnerObject::TypeObj(Rc::clone(&booltp))
-            });
-            pytype_ready(typ)
-        })
-    });
+    PY_BOOL_TYPE.with(|booltp| { pytype_ready(Rc::clone(booltp)) });
 }

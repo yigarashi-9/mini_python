@@ -12,9 +12,8 @@ pub type UnaryOp = Option<Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>>;
 pub type BinaryOp = Option<Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>>;
 
 pub struct PyTypeObject {
-    pub ob_type: Option<Rc<RefCell<PyTypeObject>>>,
     pub tp_name: String,
-    pub tp_base: Option<Rc<RefCell<PyTypeObject>>>,
+    pub tp_base: Option<Rc<PyObject>>,
     pub tp_hash: HashFunc,
     pub tp_bool: UnaryOp,
     pub tp_fun_eq: BinaryOp,
@@ -27,6 +26,29 @@ pub struct PyTypeObject {
     pub tp_subclasses: Option<Rc<PyObject>>,
 }
 
+thread_local! (
+    pub static PY_TYPE_TYPE: Rc<PyObject> = {
+        let tp = PyTypeObject {
+            tp_name: "type".to_string(),
+            tp_base: None,
+            tp_hash: Some(Rc::new(default_hash)),
+            tp_bool: None,
+            tp_fun_eq: None,
+            tp_fun_add: None,
+            tp_fun_lt: None,
+            tp_len: None,
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: None,
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(tp)))
+        })
+    }
+);
+
 impl PartialEq for PyTypeObject {
     fn eq(&self, other: &PyTypeObject) -> bool {
         self as *const _ == other as *const _
@@ -34,6 +56,27 @@ impl PartialEq for PyTypeObject {
 }
 
 impl PyObject {
+    pub fn pytype_new() -> Rc<PyObject> {
+        let tp = PyTypeObject {
+            tp_name: "".to_string(),
+            tp_base: None,
+            tp_hash: None,
+            tp_bool: None,
+            tp_fun_eq: None,
+            tp_fun_add: None,
+            tp_fun_lt: None,
+            tp_len: None,
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(tp)))
+        })
+    }
+
     pub fn pytype_typeobj_borrow(&self) -> Ref<PyTypeObject> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow(),
@@ -55,7 +98,7 @@ impl PyObject {
         }
     }
 
-    pub fn pytype_tp_base(&self) -> Option<Rc<RefCell<PyTypeObject>>> {
+    pub fn pytype_tp_base(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_base.clone(),
             _ => panic!("Type Error: pytype_tp_base")
@@ -90,30 +133,7 @@ pub fn default_hash(obj: Rc<PyObject>) -> u64 {
     hasher.finish()
 }
 
-thread_local! (
-    pub static PY_TYPE_TYPE: Rc<RefCell<PyTypeObject>>
-        = Rc::new(RefCell::new(PyTypeObject::new_type()))
-);
-
 impl PyTypeObject {
-    pub fn new_type() -> PyTypeObject {
-        PyTypeObject {
-            ob_type: None,
-            tp_name: "type".to_string(),
-            tp_base: None,
-            tp_hash: Some(Rc::new(default_hash)),
-            tp_bool: None,
-            tp_fun_eq: None,
-            tp_fun_add: None,
-            tp_fun_lt: None,
-            tp_len: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
-        }
-    }
-
     pub fn tp_dict_ref(&self) -> &Option<Rc<PyObject>> {
         &self.tp_dict
     }
@@ -260,7 +280,7 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
     }
 
     if let Some(ref base) = obj.pytype_tp_base() {
-        inherit_method(&mut obj.pytype_typeobj_borrow_mut(), &base.borrow());
+        inherit_method(&mut obj.pytype_typeobj_borrow_mut(), &base.pytype_typeobj_borrow());
     }
 
     if mro.len() >= 1 {

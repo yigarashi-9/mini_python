@@ -10,9 +10,9 @@ use object::rustfunobj::*;
 use object::typeobj::*;
 
 pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
-    let typ = Rc::clone(&v.ob_type);
-    let typ_borrowed = typ.borrow();
-    match typ_borrowed.tp_bool.as_ref() {
+    let ob_type = v.ob_type();
+    let typ = ob_type.pytype_typeobj_borrow();
+    match typ.tp_bool.as_ref() {
         Some(ref fun) => {
             let res = fun(Rc::clone(&v));
 
@@ -24,16 +24,9 @@ pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
                 panic!("Type Error: pyobj_is_bool 1")
             }
         },
-        None => {
-            match typ_borrowed.tp_len.as_ref() {
-                Some(ref fun) => {
-                    match fun(Rc::clone(&v)).inner {
-                        PyInnerObject::LongObj(ref obj) => obj.n > 0,
-                        _ => panic!("Type Error: pyobj_is_bool 2")
-                    }
-                },
-                None => panic!("Type Error: pyobj_is_bool 3")
-            }
+        None => match typ.tp_len.as_ref() {
+            Some(ref fun) => pyobj_to_i32(fun(Rc::clone(&v))) > 0,
+            None => panic!("Type Error: pyobj_is_bool 3")
         }
     }
 }
@@ -74,10 +67,10 @@ pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObjec
                 }
             }
         },
-        PyInnerObject::TypeObj(ref cls) => {
+        PyInnerObject::TypeObj(ref _cls) => {
             let dictobj = PyObject::pydict_new();
             let instance = Rc::new(PyObject {
-                ob_type: Rc::clone(cls),
+                ob_type: Some(Rc::clone(&funv)),
                 inner: PyInnerObject::InstObj(Rc::new(
                     PyInstObject {
                         class: Rc::clone(&funv),
@@ -100,7 +93,7 @@ pub fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObj
         PyInnerObject::FunObj(ref fun) => {
             PY_METHOD_TYPE.with(|tp| {
                 Rc::new(PyObject {
-                    ob_type: Rc::clone(tp),
+                    ob_type: Some(Rc::clone(tp)),
                     inner: PyInnerObject::MethodObj(Rc::new(
                         PyMethodObject {
                             ob_self: Rc::clone(instance_ref),

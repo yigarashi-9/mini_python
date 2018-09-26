@@ -19,24 +19,24 @@ fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 thread_local! (
-    pub static PY_LIST_TYPE: Rc<RefCell<PyTypeObject>> = {
-        PY_TYPE_TYPE.with(|tp| {
-            let tp = PyTypeObject {
-                ob_type: Some(Rc::clone(&tp)),
-                tp_name: "list".to_string(),
-                tp_base: None,
-                tp_hash: None,
-                tp_bool: Some(Rc::new(list_bool)),
-                tp_fun_eq: None,
-                tp_fun_add: None,
-                tp_fun_lt: None,
-                tp_len: Some(Rc::new(list_len)),
-                tp_dict: None,
-                tp_bases: None,
-                tp_mro: None,
-                tp_subclasses: None,
-            };
-            Rc::new(RefCell::new(tp))
+    pub static PY_LIST_TYPE: Rc<PyObject> = {
+        let listtp = PyTypeObject {
+            tp_name: "list".to_string(),
+            tp_base: None,
+            tp_hash: None,
+            tp_bool: Some(Rc::new(list_bool)),
+            tp_fun_eq: None,
+            tp_fun_add: None,
+            tp_fun_lt: None,
+            tp_len: Some(Rc::new(list_len)),
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(listtp))),
         })
     }
 );
@@ -52,14 +52,14 @@ impl PyObject {
                 list: RefCell::new(v.iter().map(|v|{ Rc::clone(&v) }).collect()),
             };
             Rc::new(PyObject {
-                ob_type: Rc::clone(&tp),
+                ob_type: Some(Rc::clone(&tp)),
                 inner: PyInnerObject::ListObj(Rc::new(inner))
             })
         })
     }
 
     pub fn pylist_check(&self) -> bool {
-        PY_LIST_TYPE.with(|tp| { &self.ob_type == tp })
+        PY_LIST_TYPE.with(|tp| { (&self.ob_type).as_ref() == Some(tp) })
     }
 
     pub fn pylist_getitem(&self, index: usize) -> Rc<PyObject> {

@@ -49,24 +49,24 @@ fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
 }
 
 thread_local! (
-    pub static PY_STRING_TYPE: Rc<RefCell<PyTypeObject>> = {
-        PY_TYPE_TYPE.with(|tp| {
-            let tp = PyTypeObject {
-                ob_type: Some(Rc::clone(&tp)),
-                tp_name: "str".to_string(),
-                tp_base: None,
-                tp_hash: Some(Rc::new(str_hash)),
-                tp_bool: None,
-                tp_fun_eq: Some(Rc::new(eq_str_str)),
-                tp_fun_add: Some(Rc::new(add_str_str)),
-                tp_fun_lt: None,
-                tp_len: Some(Rc::new(str_len)),
-                tp_dict: None,
-                tp_bases: None,
-                tp_mro: None,
-                tp_subclasses: None,
-            };
-            Rc::new(RefCell::new(tp))
+    pub static PY_STRING_TYPE: Rc<PyObject> = {
+        let strtp = PyTypeObject {
+            tp_name: "str".to_string(),
+            tp_base: None,
+            tp_hash: Some(Rc::new(str_hash)),
+            tp_bool: None,
+            tp_fun_eq: Some(Rc::new(eq_str_str)),
+            tp_fun_add: Some(Rc::new(add_str_str)),
+            tp_fun_lt: None,
+            tp_len: Some(Rc::new(str_len)),
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(strtp))),
         })
     }
 );
@@ -84,7 +84,7 @@ impl PyObject {
         PY_STRING_TYPE.with(|tp| {
             let inner = PyStringObject { s: raw_string };
             Rc::new(PyObject {
-                ob_type: Rc::clone(&tp),
+                ob_type: Some(Rc::clone(&tp)),
                 inner: PyInnerObject::StrObj(Rc::new(inner))
             })
         })

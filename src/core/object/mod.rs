@@ -39,13 +39,16 @@ pub enum PyInnerObject {
 }
 
 pub struct PyObject {
-    pub ob_type: Rc<RefCell<PyTypeObject>>,
+    pub ob_type: Option<Rc<PyObject>>,
     pub inner: PyInnerObject,
 }
 
 impl PyObject {
-    pub fn ob_type_ref(&self) -> &Rc<RefCell<PyTypeObject>> {
-        &self.ob_type
+    pub fn ob_type(self: &Rc<Self>) -> Rc<PyObject> {
+        match self.ob_type {
+            Some(ref obj) => Rc::clone(obj),
+            None => Rc::clone(self)
+        }
     }
 }
 
