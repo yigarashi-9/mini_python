@@ -24,7 +24,7 @@ impl Expr {
                 let v2 = e2.eval(Rc::clone(&env));
                 let typ = Rc::clone(v1.ob_type_ref());
                 let typ_borrowed = typ.borrow();
-                (typ_borrowed.tp_fun_add.as_ref().unwrap())(v1, v2)
+                (typ_borrowed.tp_fun_add.as_ref().expect("Add"))(v1, v2)
             },
             &Expr::LtExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
@@ -191,9 +191,15 @@ impl Executable for CompoundStmt {
                 }));
 
                 for base in &bases {
-                    let tp_subclasses = &base.ob_type.borrow().tp_subclasses;
-                    if tp_subclasses.is_some() {
-                        pylist_append(Rc::clone(tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
+                    match base.inner {
+                        PyInnerObject::TypeObj(ref typ) => {
+                            let mut typ = typ.borrow_mut();
+                            if typ.tp_subclasses.is_none() {
+                                typ.tp_subclasses = Some(PyObject::from_vec(&vec![]));
+                            }
+                            pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()), Rc::clone(&clsobj));
+                        },
+                        _ => panic!("Type Error: eval")
                     }
                 }
 

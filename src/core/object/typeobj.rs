@@ -3,6 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use syntax::{Id};
 use object::*;
 use object::generic::*;
 
@@ -144,6 +145,51 @@ fn inherit_method(typ: &mut PyTypeObject, base: &PyTypeObject) {
 
     if typ.tp_fun_lt.is_none() && base.tp_fun_lt.is_some() {
         typ.tp_fun_lt = base.tp_fun_lt.clone();
+    }
+}
+
+fn update_slot_subclasses(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
+    match value.inner {
+        PyInnerObject::TypeObj(ref typ) => {
+            if let Some(ref subclasses) = typ.borrow().tp_subclasses {
+                match subclasses.inner {
+                    PyInnerObject::ListObj(ref obj) => {
+                        for subclass in obj.list.borrow().iter() {
+                            if get_attr(subclass, &key).is_none() {
+                                update_slot(Rc::clone(&subclass), key.clone(), Rc::clone(&rvalue));
+                            }
+                        }
+                    },
+                    _ => panic!("Type Error: updat_slot_subclasses")
+                }
+            }
+        },
+        _ => panic!("Type Error: update_slot_subclasses")
+    }
+
+}
+
+pub fn update_slot(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
+    match value.inner {
+        PyInnerObject::TypeObj(ref typ) => {
+
+            {
+                let mut typ = typ.borrow_mut();
+
+                if key == "__add__".to_string() {
+                    typ.tp_fun_add = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+                } else if key == "__bool__".to_string() {
+                    typ.tp_bool = Some(unaryop_from_pyobj(Rc::clone(&rvalue)));
+                } else if key == "__lt__".to_string() {
+                    typ.tp_fun_lt = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+                } else if key == "__eq__".to_string() {
+                    typ.tp_fun_eq = Some(binop_from_pyobj(Rc::clone(&rvalue)));
+                }
+            }
+
+            update_slot_subclasses(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
+        },
+        _ => panic!("Type Error: update_slot")
     }
 }
 

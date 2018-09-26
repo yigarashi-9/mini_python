@@ -7,6 +7,7 @@ use object::*;
 use object::boolobj::*;
 use object::methodobj::*;
 use object::rustfunobj::*;
+use object::typeobj::*;
 
 pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
     let typ = Rc::clone(&v.ob_type);
@@ -144,14 +145,15 @@ pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
 }
 
 pub fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
-    let keyval = PyObject::from_string(key);
+    let keyval = PyObject::from_string(key.clone());
     let value = Rc::clone(value);
     match value.inner {
         PyInnerObject::TypeObj(ref typ) => {
             match typ.borrow().tp_dict_ref() {
-                &Some(ref dict) => dict.update(keyval, rvalue),
+                &Some(ref dict) => dict.update(Rc::clone(&keyval), Rc::clone(&rvalue)),
                 &None => panic!("Type Error: update_attr")
             }
+            update_slot(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
         },
         PyInnerObject::InstObj(ref inst) => {
             inst.dict.update(keyval, rvalue);
