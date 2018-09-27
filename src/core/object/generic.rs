@@ -6,6 +6,7 @@ use syntax::*;
 use object::*;
 use object::boolobj::*;
 use object::methodobj::*;
+use object::noneobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
@@ -61,9 +62,13 @@ pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObjec
                 PyRustFun::MethO(ref fun) => {
                     if args.len() != 1 {
                         panic!("Type error: call_func RustFunObj METH_O");
-                    } else {
-                        (*fun)(Rc::clone(&args[0]))
                     }
+                    // Probably, slf cannot be None after module is implemented
+                    let slf = match obj.ob_self {
+                        Some(ref slf) => Rc::clone(slf),
+                        None => PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
+                    };
+                    (*fun)(slf, Rc::clone(&args[0]))
                 }
             }
         },
@@ -109,9 +114,25 @@ pub fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObj
     }
 }
 
+pub fn get_attr_afterhook(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
+    match value.inner {
+        PyInnerObject::RustFunObj(ref obj) => {
+            Rc::new(PyObject {
+                ob_type: PY_RUSTFUN_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+                inner: PyInnerObject::RustFunObj(Rc::new(PyRustFunObject {
+                    name: obj.name.clone(),
+                    ob_self: Some(Rc::clone(&slf)),
+                    rust_fun: obj.rust_fun.clone(),
+                }))
+            })
+        },
+        _ => Rc::clone(value)
+    }
+}
+
 pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
     let keyval = Rc::new(PyObject::from_string(key.clone()));
-    match value.inner {
+    let retval = match Rc::clone(value).inner {
         PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict_ref().as_ref().unwrap().pydict_lookup(&keyval),
         PyInnerObject::InstObj(ref inst) => {
             match inst.dict.pydict_lookup(&keyval) {
@@ -129,7 +150,17 @@ pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
                 }
             }
         },
-        _ => panic!("Type Error: get_attr")
+        _ => {
+            let tp_dict = Rc::clone(&value).ob_type().pytype_tp_dict();
+            match tp_dict {
+                Some(tp_dict) => tp_dict.pydict_lookup(&keyval),
+                None => None,
+            }
+        }
+    };
+    match retval {
+        Some(ref retval) => Some(get_attr_afterhook(retval, Rc::clone(value))),
+        None => None,
     }
 }
 

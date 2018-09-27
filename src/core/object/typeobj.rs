@@ -20,6 +20,7 @@ pub struct PyTypeObject {
     pub tp_fun_add: BinaryOp,
     pub tp_fun_lt: BinaryOp,
     pub tp_len: UnaryOp,
+    pub tp_methods: Option<Vec<Rc<PyObject>>>,
     pub tp_dict: Option<Rc<PyObject>>,
     pub tp_bases: Option<Rc<PyObject>>,
     pub tp_mro: Option<Rc<PyObject>>,
@@ -37,6 +38,7 @@ thread_local! (
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: None,
+            tp_methods: None,
             tp_dict: None,
             tp_bases: None,
             tp_mro: None,
@@ -66,6 +68,7 @@ impl PyObject {
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: None,
+            tp_methods: None,
             tp_dict: None,
             tp_bases: None,
             tp_mro: None,
@@ -270,13 +273,35 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
         update_attr(&obj, "__mro__".to_string(), mro_obj);
     }
 
+    if obj.pytype_tp_dict().is_none() {
+        let mut typ = obj.pytype_typeobj_borrow_mut();
+        let dictobj = PyObject::pydict_new();
+
+        if let Some(ref tp_methods) = typ.tp_methods {
+            for meth in tp_methods {
+                dictobj.pydict_update(PyObject::from_string(Rc::clone(meth).pyrustfun_name()), Rc::clone(&meth))
+            }
+        }
+        typ.tp_dict = Some(dictobj);
+    }
+
     if let Some(ref dictobj) = obj.pytype_tp_dict() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
-        typ.tp_bool = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__");
-        typ.tp_fun_add = get_wrapped_binop(Rc::clone(&dictobj), "__add__");
-        typ.tp_fun_eq = get_wrapped_binop(Rc::clone(&dictobj), "__eq__");
-        typ.tp_fun_lt = get_wrapped_binop(Rc::clone(&dictobj), "__lt__");
-        typ.tp_len = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__");
+        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__") {
+            typ.tp_bool = Some(fun);
+        }
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__add__") {
+            typ.tp_fun_add = Some(fun);
+        }
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__eq__") {
+            typ.tp_fun_eq = Some(fun);
+        }
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__lt__") {
+            typ.tp_fun_lt = Some(fun);
+        }
+        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__") {
+            typ.tp_len = Some(fun);
+        }
     }
 
     if let Some(ref base) = obj.pytype_tp_base() {

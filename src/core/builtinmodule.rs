@@ -4,10 +4,11 @@ use env::*;
 
 use object::*;
 use object::boolobj::*;
+use object::listobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
-fn builtin_len(obj: Rc<PyObject>) -> Rc<PyObject> {
+fn builtin_len(_module: Rc<PyObject>, obj: Rc<PyObject>) -> Rc<PyObject> {
     let ob_type = obj.ob_type();
     let typ = ob_type.pytype_typeobj_borrow();
     match typ.tp_len {
@@ -19,6 +20,7 @@ fn builtin_len(obj: Rc<PyObject>) -> Rc<PyObject> {
 macro_rules! set_builtin_fun {
     ($env:expr, $id:expr, $flag:ident, $fun:ident) => {
         let inner = PyRustFunObject {
+            name: $id.to_string(),
             ob_self: None,
             rust_fun: PyRustFun::$flag(Rc::new($fun))
         };
@@ -33,4 +35,5 @@ macro_rules! set_builtin_fun {
 pub fn load_builtins(env: Rc<Env>) {
     set_builtin_fun!(env, "len", MethO, builtin_len);
     PY_BOOL_TYPE.with(|booltp| { pytype_ready(Rc::clone(booltp)) });
+    PY_LIST_TYPE.with(|listtp| { pytype_ready(Rc::clone(listtp)) });
 }

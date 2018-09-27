@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use object::{PyObject, PyInnerObject};
+use object::noneobj::*;
+use object::rustfunobj::*;
 use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 
 fn list_len(v: Rc<PyObject>) -> Rc<PyObject> {
@@ -20,6 +22,15 @@ fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
 
 thread_local! (
     pub static PY_LIST_TYPE: Rc<PyObject> = {
+        let mut tp_methods = vec![];
+        tp_methods.push(Rc::new(PyObject {
+            ob_type: PY_RUSTFUN_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            inner: PyInnerObject::RustFunObj(Rc::new(PyRustFunObject {
+                name: "append".to_string(),
+                ob_self: None,
+                rust_fun: PyRustFun::MethO(Rc::new(pylist_append)),
+            })),
+        }));
         let listtp = PyTypeObject {
             tp_name: "list".to_string(),
             tp_base: None,
@@ -29,6 +40,7 @@ thread_local! (
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: Some(Rc::new(list_len)),
+            tp_methods: Some(tp_methods),
             tp_dict: None,
             tp_bases: None,
             tp_mro: None,
@@ -94,10 +106,11 @@ impl PyObject {
 
 }
 
-pub fn pylist_append(obj: Rc<PyObject>, elm: Rc<PyObject>) {
-    match obj.inner {
+pub fn pylist_append(slf: Rc<PyObject>, elm: Rc<PyObject>) -> Rc<PyObject> {
+    match slf.inner {
         PyInnerObject::ListObj(ref obj) => {
-            obj.list.borrow_mut().push(Rc::clone(&elm))
+            obj.list.borrow_mut().push(Rc::clone(&elm));
+            PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
         },
         _ => panic!("Type Error: pylist_append")
     }

@@ -64,7 +64,7 @@ test_cases![
     class_var, class_instance_var, class_method, assign_attr, class_update, class_init,
     dict_basic,
     string_add, meta_add, inherit_meta_add, meta_add_lazy,
-    list_basic,
+    list_basic, list_append,
     builtin_len,
     inheritance_simple, inheritance_complex,
     bool_arith

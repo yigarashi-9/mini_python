@@ -23,6 +23,7 @@ thread_local! (
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: Some(Rc::new(dict_len)),
+            tp_methods: None,
             tp_dict: None,
             tp_bases: None,
             tp_mro: None,
