@@ -26,6 +26,7 @@ thread_local! (
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: None,
+            tp_call: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,

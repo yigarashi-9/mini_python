@@ -5,6 +5,7 @@ use env::*;
 use object::*;
 use object::boolobj::*;
 use object::listobj::*;
+use object::longobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
@@ -34,6 +35,9 @@ macro_rules! set_builtin_fun {
 
 pub fn load_builtins(env: Rc<Env>) {
     set_builtin_fun!(env, "len", MethO, builtin_len);
+    env.update("type".to_string(), PY_TYPE_TYPE.with(|tp| { Rc::clone(tp) }));
+    env.update("int".to_string(), PY_LONG_TYPE.with(|tp| { Rc::clone(tp) }));
+    env.update("bool".to_string(), PY_BOOL_TYPE.with(|tp| { Rc::clone(tp) }));
     PY_BOOL_TYPE.with(|booltp| { pytype_ready(Rc::clone(booltp)) });
     PY_LIST_TYPE.with(|listtp| { pytype_ready(Rc::clone(listtp)) });
 }

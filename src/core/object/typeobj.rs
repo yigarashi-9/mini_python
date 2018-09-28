@@ -7,19 +7,21 @@ use syntax::{Id};
 use object::*;
 use object::generic::*;
 
-pub type HashFunc = Option<Rc<dyn Fn(Rc<PyObject>) -> u64>>;
+pub type HashFun = Option<Rc<dyn Fn(Rc<PyObject>) -> u64>>;
 pub type UnaryOp = Option<Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>>;
 pub type BinaryOp = Option<Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>>;
+pub type VarArgFun = Option<Rc<dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>>>;
 
 pub struct PyTypeObject {
     pub tp_name: String,
     pub tp_base: Option<Rc<PyObject>>,
-    pub tp_hash: HashFunc,
+    pub tp_hash: HashFun,
     pub tp_bool: UnaryOp,
     pub tp_fun_eq: BinaryOp,
     pub tp_fun_add: BinaryOp,
     pub tp_fun_lt: BinaryOp,
     pub tp_len: UnaryOp,
+    pub tp_call: VarArgFun,
     pub tp_methods: Option<Vec<Rc<PyObject>>>,
     pub tp_dict: Option<Rc<PyObject>>,
     pub tp_bases: Option<Rc<PyObject>>,
@@ -34,10 +36,11 @@ thread_local! (
             tp_base: None,
             tp_hash: Some(Rc::new(default_hash)),
             tp_bool: None,
-            tp_fun_eq: None,
+            tp_fun_eq: Some(Rc::new(type_eq)),
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: None,
+            tp_call: Some(Rc::new(type_call)),
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -50,6 +53,10 @@ thread_local! (
         })
     }
 );
+
+fn type_eq(slf: Rc<PyObject>, other: Rc<PyObject>) -> Rc<PyObject> {
+    PyObject::from_bool(slf == other)
+}
 
 impl PartialEq for PyTypeObject {
     fn eq(&self, other: &PyTypeObject) -> bool {
@@ -68,6 +75,7 @@ impl PyObject {
             tp_fun_add: None,
             tp_fun_lt: None,
             tp_len: None,
+            tp_call: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -140,6 +148,33 @@ impl PyTypeObject {
     pub fn tp_dict_ref(&self) -> &Option<Rc<PyObject>> {
         &self.tp_dict
     }
+}
+
+fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+
+    if PY_TYPE_TYPE.with(|tp| { tp == &typ }) {
+        if args.len() == 1 {
+            return Rc::clone(&args[0].ob_type())
+        } else {
+            panic!("Type Error: type_call")
+        }
+    }
+
+    let dictobj = PyObject::pydict_new();
+    let instance = Rc::new(PyObject {
+        ob_type: Some(Rc::clone(&typ)),
+        inner: PyInnerObject::InstObj(Rc::new(
+            PyInstObject {
+                class: Rc::clone(&typ),
+                dict: dictobj,
+            }
+        ))
+    });
+    match get_attr(&instance, &"__init__".to_string()) {
+        Some(init_fun) => call_func(Rc::clone(&init_fun), args),
+        None => PyObject::none_obj()
+    };
+    instance
 }
 
 fn pick_winner(mro_list: &Vec<Vec<Rc<PyObject>>>) -> Rc<PyObject> {

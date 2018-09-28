@@ -67,5 +67,6 @@ test_cases![
     list_basic, list_append,
     builtin_len,
     inheritance_simple, inheritance_complex,
-    bool_arith
+    bool_arith,
+    type_call
 ];

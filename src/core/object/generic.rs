@@ -39,7 +39,7 @@ pub fn pyobj_to_i32(v: Rc<PyObject>) -> i32 {
     }
 }
 
-pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObject> {
+pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
     match funv.inner {
         PyInnerObject::FunObj(ref fun) => {
             match fun.code.exec(Rc::new(Env::new_child(&fun.env, &fun.parms, args))) {
@@ -50,7 +50,8 @@ pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObjec
         },
         PyInnerObject::MethodObj(ref method) => {
             let mut vals = vec![Rc::clone(&method.ob_self)];
-            vals.append(args);
+            let mut args = args.clone();
+            vals.append(&mut args);
             match method.code.exec(Rc::new(Env::new_child(&method.env, &method.parms, &vals))) {
                 CtrlOp::Nop => PyObject::none_obj(),
                 CtrlOp::Return(val) => val,
@@ -72,24 +73,14 @@ pub fn call_func(funv: Rc<PyObject>, args: &mut Vec<Rc<PyObject>>) -> Rc<PyObjec
                 }
             }
         },
-        PyInnerObject::TypeObj(ref _cls) => {
-            let dictobj = PyObject::pydict_new();
-            let instance = Rc::new(PyObject {
-                ob_type: Some(Rc::clone(&funv)),
-                inner: PyInnerObject::InstObj(Rc::new(
-                    PyInstObject {
-                        class: Rc::clone(&funv),
-                        dict: dictobj,
-                    }
-                ))
-            });
-            match get_attr(&instance, &"__init__".to_string()) {
-                Some(init_fun) => call_func(Rc::clone(&init_fun), args),
-                None => PyObject::none_obj()
-            };
-            instance
-        },
-        _ => panic!("Type Error: Callable expected"),
+        _ => {
+            let ob_type = funv.ob_type();
+            let typ = ob_type.pytype_typeobj_borrow();
+            match typ.tp_call {
+                Some(ref tp_call) => tp_call(Rc::clone(&funv), args),
+                None => panic!("Type Error: Callable expected"),
+            }
+        }
     }
 }
 
