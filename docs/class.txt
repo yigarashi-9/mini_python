@@ -1,0 +1,44 @@
+Python 3.7
+class 定義とインスタンス生成について調査
+以下のコードを実行した時に何が起こるかを理解する
+
+class A:
+    def __init__(self):
+        self.x = 1
+a = A()
+
+- クラス生成
+  - Python/bultinmodule.c/builtin__build_class__
+    - func, name のみで呼び出すので bases は空
+    - meta に PyType_Type を設定
+    - _PyObject_FastCallDict(&PyType_Type, {name, bases, ns}, 3, mkw) で呼び出し
+      - bases は空
+      - ns は class body を実行してできた環境
+  - Objects/call.c/_PyObject_FastCallDict
+    - type_call を &PyType_Type, (name, bases ns) で呼び出し
+  - Objects/typeobjects.c/type_call
+    - type_new を同じ引数で呼び出し
+  - ""/type_new
+    - base, bases を object に設定
+    - tp_alloc に PyObject_GenericAlloc がセットされているはずでそれを呼び出す
+      - slots 分を余分に取って offset を記録しておく
+      - A の tp_basicsize を slot を伸ばした分だけ増やして設定しておく
+  - ""/PyType_Ready
+    - base は object なので object_init を tp_init にコピー
+
+- インスタンス生成
+  - callable.ob_type.tp_call (type_call) に A を渡して呼び出す
+  - Objects/typeobjects.c/type_call args: A
+    - A->tp_new の呼び出し object_new のはず
+    - ""/object_new
+      - type->tp_alloc == PyType_GenericAlloc の呼び出し
+        - ntimes の部分は0になっている
+        - A->tp_basicsize は slot の分が大きくなっている
+    - A->tp_initの呼び出し
+      - PyObject_SetAttr ----> PyDict_SetItem で辞書が生成されている
+      - PyObject_SetAttr で最初に descriptor を探しているがどういうことか
+      - デスクリプタに関する資料
+        - https://docs.python.jp/3/howto/descriptor.html
+        - https://qiita.com/koshigoe/items/848ddc0272b3cee92134
+        - デスクリプタは，ある属性にアクセスした時の挙動を変更するための仕組み
+          - A.x に，インスタンスオブジェクトの x にアクセスするという挙動を設定すれば普通の挙動

@@ -1,0 +1,165 @@
+- type object のメモリ管理について
+
+typeobject.c / tp_alloc あたりで，ヒープにある型かどうかのフラグを検査して，
+ヒープ型の場合のみ INCREF している
+PyLong_Typeの場合などは INCREF していないように見える
+
+
+- 関数 / メソッドについて
+
+1. Object / funcobject.h / PyFuncionObject
+def 文を実行することによって生成される最も基本的な関数オブジェクト
+
+2. Object / methodobject.h / PyCFunctionObject
+C関数のラッパー
+フラグによって呼び出し方を制御している
+self をバインドすることもできる
+
+3. Object / classobject.h / PyMethodObject
+インスタンスメソッドに対応する構造体
+self をバインドする
+
+4. Object / methodobject.h / PyMethodDef
+モジュールにPyCFunctionObjectを格納するための構造体
+
+PyCFunctionObject -> PyMethodDef -> PyCFunction という関係
+
+
+9/20
+
+ビルトイン関数を使えるようにする
+- PyRustFunctionObject -> enum PyRustFunction を定義する
+- call function を改造
+- 最初の環境にオブジェクトを読み込むようにする
+
+継承を実現する
+- MROの調査
+  - どのタイミングでMROを構築しているのか
+- class 定義で複数の親クラスを与えられるようにする
+- get_attr で mro を参照するように変更
+
+
+class A(3):
+    pass
+
+とするとType Errorになる．
+
+class 定義をするときは，通常 metaclass として type が選ばれて type_new で class が生成される
+どういうわけか metaclass として 3 が選択され，int の tp_new が呼ばれてしまうのでエラー
+基底クラスの __metaclass__ 要素は呼ばれないみたい？
+
+class 定義後に __add__ 関数を追加しても足し算がうまくいく
+update 時に tp_add を更新しているのか？
+
+
+9/22
+
+PyObject の実装を変更する
+
+ポイント
+
+- 型ごとの実装をファイルに分割できるようにする
+- ob_type を PyObject 構造体の一番奥に置く
+  - ダックタイピングのときは ob_type を使う
+  - 具体的な型に着目するときは inner をパターンマッチしてタグチェックする
+- generic な関数と型特有の関数を意識して分割
+
+それぞれの型のオブジェクトのコンストラクタの return type を Rc にした
+ただし PyTypeObject だけは初期化処理が特殊なので変更していない
+
+
+9/23
+
+ビルトインの type object PyClassObject を忠実に実装する
+ビルトインオブジェクトの継承関係を実装する
+
+- type(object) == type
+  - PyBaseObject_Type の ob_type に PyType_Type がセットされているため
+- int.__mro__ == (int, object)
+  - LOAD_ATTR
+  - PyObject_GetAttr
+  - PyType_Type -> tp_getattro
+  - PyType_Ready で mro などが準備される
+  - tp_base が空の時は PyBaseObject_Type が指定されるので (int, object) となる
+- bool.__mro__ == (bool, int, object)
+  - PyBool_Type -> tp_base == PyLong_Type でうまく回っている
+
+
+9/24
+
+tp_base を追加して bool を int のサブクラスにする
+bool に対して add が機能するようにする
+
+attribute の探索方法をちゃんと調べる
+
+- 例えば PyBool_Type
+  - PyType_Type -> tp_getattro に PyBool_Type を渡して mro を探索する
+
+- そもそもクラスに適切な tp_getattr ないし tp_getattro が設定されるのはどうして
+  - __build_class__ で PyType_Type->tp_call が呼び出される
+  - type_call --> type_new
+  - type_new でセットしてそう
+  - 特殊ケースで PyObject_GenericGetAttr をセットしてるのは確認した
+  - その他，slots 周りの挙動はよくわからない
+  - typeobject.c PyBaseObject_Type->tp_getattro も PyObject_GenericGetAttr
+
+- クラスインスタンスに tp_getattro が設定されるのはなぜか
+
+- PyLongObject の tp_add が PyBoolObject でも機能する仕組みがわからない
+  - PyType_Ready --> inherit_slots でコピーしている
+  - PyType_Ready がいつ呼び出されているかを確認できればよい
+
+
+9/25
+
+ob_type を RefCell でくるむ
+インタプリタ開始時に PyBoolType に対して PyType_Ready を走らせる
+
+pytype_ready を修正して親クラスの __add__ などを使えるようにした
+
+
+9/26
+
+update_attr を編集してあとから tp_fun_add などを使えるようにする
+match して PyInnerObject を直接操作している部分の API を整備してリファクタリング
+一部 PyTypeObject を直接触っていた部分を全て修正した
+
+
+9/27
+
+append を実装
+
+append について調査
+
+- 初期化
+  - tp_members にその型が持つメソッドが定義されている
+  - PyType_Ready --> add_members で tp_members が tp_dict に加えられる
+  - PyMethodDescrObject を作ってラップ
+  - ここでは当然 ml_self はセットされていない
+
+- LOAD_ATTR
+  - デスクリプタを呼び出すときに PyMedhodDescrObject->tp_descr_get が呼び出される
+  - method_get が self をセットしている
+
+
+9/28
+
+tp_call を追加して type bool int を実装
+
+
+10/1
+
+cpython に PyInstanceObject はない
+__dict__ 要素をどのように管理しているのか分からない
+class.txt に調査結果をまとめた
+
+
+10/2
+
+PyInstanceObject を無くす
+とりあえず PyObject に ob_dict: Option<Rc<PyObject>> を足すしかないのでは
+
+
+その他タスク
+- tp_getattr を追加して get_attr をリファクタリング
+- generic で直接 PyInner を操作している部分を修正
