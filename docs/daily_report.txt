@@ -158,8 +158,20 @@ class.txt に調査結果をまとめた
 
 PyInstanceObject を無くす
 とりあえず PyObject に ob_dict: Option<Rc<PyObject>> を足すしかないのでは
+__dict__ 要素だけでなく __class__ 要素などもあり，現状では実装の良し悪しを判断できないため保留
+__class__ 要素などは tp_getsets でデスクリプタを用意するから問題なさそう
+PyType_Ready とかで tp_dict にデスクリプタを突っ込む
+
+tp_getattr を追加して get_attr をリファクタリング
+tp_getattr を追加しようとすると，PyInnerObject::InstObj の扱いが難しい
+クラスのインスタンスには独自の tp_getattro を持たせたくない
+__dict__ を通して generic な操作を行いたいので ob_dict が欲しくなった
+
+ユーザー定義メソッドで self をバインドするタイミングが分からない
+おそらく ユーザー定義メソッドは PyMethodDescrObject になっている
+PyObject_GenericGetAttr は descriptor の get を呼び出して self をバインドする
+type_getattro は descriptor の get を呼ばず，methoddescr_call を使うことになる
 
 
 その他タスク
-- tp_getattr を追加して get_attr をリファクタリング
 - generic で直接 PyInner を操作している部分を修正
