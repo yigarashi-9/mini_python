@@ -45,7 +45,7 @@ impl Expr {
             },
             &Expr::AttrExpr(ref e, ref ident) => {
                 let v = e.eval(Rc::clone(&env));
-                get_attr(&v, ident).unwrap()
+                get_attro(v, PyObject::from_string(ident.clone())).unwrap()
             },
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));
@@ -53,7 +53,7 @@ impl Expr {
                 if v1.pylist_check() {
                     v1.pylist_getitem(pyobj_to_i32(v2) as usize)
                 } else if v1.pydict_check() {
-                    v1.pydict_lookup(&v2).unwrap()
+                    v1.pydict_lookup(v2).unwrap()
                 } else {
                     panic!("Type Error: eval SubscrExpr")
                 }

@@ -18,6 +18,7 @@ thread_local! (
                 tp_fun_lt: None,
                 tp_len: None,
                 tp_call: None,
+                tp_getattro: None,
                 tp_methods: None,
                 tp_dict: None,
                 tp_bases: None,
@@ -27,6 +28,7 @@ thread_local! (
         });
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            ob_dict: None,
             inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(booltp))),
         })
     };
@@ -36,6 +38,7 @@ thread_local! (
             let inner = PyLongObject { n: 1 };
             Rc::new(PyObject {
                 ob_type: Some(Rc::clone(tp)),
+                ob_dict: None,
                 inner: PyInnerObject::LongObj(Rc::new(inner))
             })
         })
@@ -46,6 +49,7 @@ thread_local! (
             let inner = PyLongObject { n: 0 };
             Rc::new(PyObject {
                 ob_type: Some(Rc::clone(tp)),
+                ob_dict: None,
                 inner: PyInnerObject::LongObj(Rc::new(inner))
             })
         })

@@ -2,7 +2,6 @@ pub mod boolobj;
 pub mod dictobj;
 pub mod funobj;
 pub mod generic;
-pub mod instobj;
 pub mod listobj;
 pub mod longobj;
 pub mod methodobj;
@@ -17,7 +16,6 @@ use std::rc::Rc;
 
 use self::dictobj::PyDictObject;
 use self::funobj::PyFunObject;
-use self::instobj::PyInstObject;
 use self::listobj::PyListObject;
 use self::longobj::PyLongObject;
 use self::methodobj::PyMethodObject;
@@ -28,7 +26,7 @@ use self::typeobj::PyTypeObject;
 pub enum PyInnerObject {
     DictObj(Rc<PyDictObject>),
     FunObj(Rc<PyFunObject>),
-    InstObj(Rc<PyInstObject>),
+    InstObj,
     ListObj(Rc<PyListObject>),
     LongObj(Rc<PyLongObject>),
     MethodObj(Rc<PyMethodObject>),
@@ -40,6 +38,7 @@ pub enum PyInnerObject {
 
 pub struct PyObject {
     pub ob_type: Option<Rc<PyObject>>,
+    pub ob_dict: Option<Rc<PyObject>>,
     pub inner: PyInnerObject,
 }
 

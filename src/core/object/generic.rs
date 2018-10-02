@@ -84,15 +84,16 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
     }
 }
 
-pub fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObject> {
+pub fn bind_self(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
     match value.inner {
         PyInnerObject::FunObj(ref fun) => {
             PY_METHOD_TYPE.with(|tp| {
                 Rc::new(PyObject {
                     ob_type: Some(Rc::clone(tp)),
+                    ob_dict: None,
                     inner: PyInnerObject::MethodObj(Rc::new(
                         PyMethodObject {
-                            ob_self: Rc::clone(instance_ref),
+                            ob_self: Rc::clone(&slf),
                             env: Rc::clone(&fun.env),
                             parms: fun.parms.clone(),
                             code: fun.code.clone(),
@@ -101,15 +102,10 @@ pub fn make_method(value: Rc<PyObject>, instance_ref: &Rc<PyObject>) -> Rc<PyObj
                 })
             })
         },
-        _ => Rc::clone(&value),
-    }
-}
-
-pub fn get_attr_afterhook(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
-    match value.inner {
         PyInnerObject::RustFunObj(ref obj) => {
             Rc::new(PyObject {
                 ob_type: PY_RUSTFUN_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+                ob_dict: None,
                 inner: PyInnerObject::RustFunObj(Rc::new(PyRustFunObject {
                     name: obj.name.clone(),
                     ob_self: Some(Rc::clone(&slf)),
@@ -121,36 +117,26 @@ pub fn get_attr_afterhook(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObjec
     }
 }
 
-pub fn get_attr(value: &Rc<PyObject>, key: &Id) -> Option<Rc<PyObject>> {
-    let keyval = Rc::new(PyObject::from_string(key.clone()));
-    let retval = match Rc::clone(value).inner {
-        PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict_ref().as_ref().unwrap().pydict_lookup(&keyval),
-        PyInnerObject::InstObj(ref inst) => {
-            match inst.dict.pydict_lookup(&keyval) {
-                Some(ret_val) => Some(ret_val),
-                None => {
-                    if let Some(ref mro) = inst.class.pytype_tp_mro() {
-                        if !(mro.pylist_check()) { return None }
-                        for i in 0..(mro.pylist_size()) {
-                            if let Some(ret_val) = get_attr(&mro.pylist_getitem(i), key) {
-                                return Some(make_method(Rc::clone(&ret_val), &value))
-                            }
-                        }
-                    };
-                    None
-                }
-            }
-        },
-        _ => {
-            let tp_dict = Rc::clone(&value).ob_type().pytype_tp_dict();
-            match tp_dict {
-                Some(tp_dict) => tp_dict.pydict_lookup(&keyval),
-                None => None,
-            }
-        }
+pub fn get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+    let ob_type = value.ob_type();
+    if let Some(ref tp_getattro) = ob_type.pytype_typeobj_borrow().tp_getattro {
+        return tp_getattro(value, key)
     };
-    match retval {
-        Some(ref retval) => Some(get_attr_afterhook(retval, Rc::clone(value))),
+    panic!("No tp_getattro");
+}
+
+pub fn generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+    let mut ret_val = None;
+    if let Some(ref ob_dict) = value.ob_dict {
+        ret_val = ob_dict.pydict_lookup(Rc::clone(&key));
+    };
+
+    if ret_val.is_none() {
+        ret_val = type_getattro(value.ob_type(), Rc::clone(&key));
+    };
+
+    match ret_val {
+        Some(ref retval) => Some(bind_self(retval, Rc::clone(&value))),
         None => None,
     }
 }
@@ -162,13 +148,16 @@ pub fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
         PyInnerObject::TypeObj(ref typ) => {
             match typ.borrow().tp_dict_ref() {
                 &Some(ref dict) => dict.pydict_update(Rc::clone(&keyval), Rc::clone(&rvalue)),
-                &None => panic!("Type Error: update_attr")
+                &None => panic!("Type Error: update_attr 1")
             }
             update_slot(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
         },
-        PyInnerObject::InstObj(ref inst) => {
-            inst.dict.pydict_update(keyval, rvalue);
-        },
-        _ => panic!("Type Error: update_attr")
+        PyInnerObject::InstObj => match value.ob_dict {
+            Some(ref ob_dict) => {
+                ob_dict.pydict_update(keyval, rvalue);
+            },
+            None => panic!("No Attribute: update_attr")
+        }
+        _ => panic!("Type Error: update_attr 2")
     }
 }

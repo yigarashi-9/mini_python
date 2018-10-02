@@ -60,6 +60,7 @@ thread_local! (
             tp_fun_lt: None,
             tp_len: Some(Rc::new(str_len)),
             tp_call: None,
+            tp_getattro: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -68,6 +69,7 @@ thread_local! (
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            ob_dict: None,
             inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(strtp))),
         })
     }
@@ -87,6 +89,7 @@ impl PyObject {
             let inner = PyStringObject { s: raw_string };
             Rc::new(PyObject {
                 ob_type: Some(Rc::clone(&tp)),
+                ob_dict: None,
                 inner: PyInnerObject::StrObj(Rc::new(inner))
             })
         })

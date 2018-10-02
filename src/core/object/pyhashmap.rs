@@ -11,10 +11,10 @@ impl PyHashMap {
         PyHashMap { table: vec![] }
     }
 
-    pub fn get(&self, key: &Rc<PyObject>) -> Option<&Rc<PyObject>> {
+    pub fn get(&self, key: Rc<PyObject>) -> Option<&Rc<PyObject>> {
         self.table.iter().find_map(|ref tuple| {
             let ob_type = key.ob_type();
-            if tuple.0 == ob_type.pytype_typeobj_borrow().tp_hash.as_ref().unwrap()(Rc::clone(key)) {
+            if tuple.0 == ob_type.pytype_typeobj_borrow().tp_hash.as_ref().unwrap()(Rc::clone(&key)) {
                 Some(&tuple.2)
             } else {
                 None

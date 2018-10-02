@@ -27,6 +27,7 @@ macro_rules! set_builtin_fun {
         };
         let obj = Rc::new(PyObject {
             ob_type: PY_RUSTFUN_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            ob_dict: None,
             inner: PyInnerObject::RustFunObj(Rc::new(inner))
         });
         $env.update($id.to_string(), obj);
