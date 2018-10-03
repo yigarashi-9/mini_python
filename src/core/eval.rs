@@ -45,7 +45,7 @@ impl Expr {
             },
             &Expr::AttrExpr(ref e, ref ident) => {
                 let v = e.eval(Rc::clone(&env));
-                get_attro(v, PyObject::from_string(ident.clone())).unwrap()
+                pyobj_get_attro(v, PyObject::from_string(ident.clone())).unwrap()
             },
             &Expr::SubscrExpr(ref e1, ref e2) => {
                 let v1 = e1.eval(Rc::clone(&env));

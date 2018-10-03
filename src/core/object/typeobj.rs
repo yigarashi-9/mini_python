@@ -172,7 +172,7 @@ fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
         ob_dict: Some(Rc::clone(&dictobj)),
         inner: PyInnerObject::InstObj,
     });
-    match get_attro(Rc::clone(&instance), PyObject::from_str("__init__")) {
+    match pyobj_get_attro(Rc::clone(&instance), PyObject::from_str("__init__")) {
         Some(init_fun) => call_func(Rc::clone(&init_fun), args),
         None => PyObject::none_obj()
     };
@@ -388,6 +388,6 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
 
     if obj.pytype_typeobj_borrow().tp_getattro.is_none() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
-        typ.tp_getattro = Some(Rc::new(generic_get_attro));
+        typ.tp_getattro = Some(Rc::new(pyobj_generic_get_attro));
     }
 }

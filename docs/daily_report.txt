@@ -175,3 +175,6 @@ type_getattro は descriptor の get を呼ばず，methoddescr_call を使う�
 
 その他タスク
 - generic で直接 PyInner を操作している部分を修正
+  - call_function は例外
+- for stmt の実装
+- tp_*** を tp_dict に突っ込む

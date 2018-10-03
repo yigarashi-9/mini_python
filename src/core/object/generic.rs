@@ -117,7 +117,7 @@ pub fn bind_self(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
     }
 }
 
-pub fn get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+pub fn pyobj_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
     let ob_type = value.ob_type();
     if let Some(ref tp_getattro) = ob_type.pytype_typeobj_borrow().tp_getattro {
         return tp_getattro(value, key)
@@ -125,7 +125,7 @@ pub fn get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>>
     panic!("No tp_getattro");
 }
 
-pub fn generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+pub fn pyobj_generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
     let mut ret_val = None;
     if let Some(ref ob_dict) = value.ob_dict {
         ret_val = ob_dict.pydict_lookup(Rc::clone(&key));
