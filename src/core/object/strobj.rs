@@ -61,6 +61,7 @@ thread_local! (
             tp_len: Some(Rc::new(str_len)),
             tp_call: None,
             tp_getattro: None,
+            tp_setattro: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -76,7 +77,7 @@ thread_local! (
 );
 
 pub struct PyStringObject {
-    s: String,
+    pub s: String,
 }
 
 impl PyObject {

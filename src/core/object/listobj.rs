@@ -43,6 +43,7 @@ thread_local! (
             tp_len: Some(Rc::new(list_len)),
             tp_call: None,
             tp_getattro: None,
+            tp_setattro: None,
             tp_methods: Some(tp_methods),
             tp_dict: None,
             tp_bases: None,

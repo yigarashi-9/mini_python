@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use eval::{CtrlOp, Executable};
 use env::*;
-use syntax::*;
 use object::*;
 use object::boolobj::*;
 use object::methodobj::*;
@@ -36,6 +35,13 @@ pub fn pyobj_to_i32(v: Rc<PyObject>) -> i32 {
     match v.inner {
         PyInnerObject::LongObj(ref obj) => obj.n,
         _ => panic!("Type Error: pyobj_to_i32"),
+    }
+}
+
+pub fn pyobj_to_string(v: Rc<PyObject>) -> String {
+    match v.inner {
+        PyInnerObject::StrObj(ref obj) => obj.s.clone(),
+        _ => panic!("Type Error: pyobj_to_string"),
     }
 }
 
@@ -141,23 +147,12 @@ pub fn pyobj_generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option
     }
 }
 
-pub fn update_attr(value: &Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
-    let keyval = PyObject::from_string(key.clone());
-    let value = Rc::clone(value);
-    match value.inner {
-        PyInnerObject::TypeObj(ref typ) => {
-            match typ.borrow().tp_dict_ref() {
-                &Some(ref dict) => dict.pydict_update(Rc::clone(&keyval), Rc::clone(&rvalue)),
-                &None => panic!("Type Error: update_attr 1")
-            }
-            update_slot(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
-        },
-        PyInnerObject::InstObj => match value.ob_dict {
-            Some(ref ob_dict) => {
-                ob_dict.pydict_update(keyval, rvalue);
-            },
-            None => panic!("No Attribute: update_attr")
-        }
-        _ => panic!("Type Error: update_attr 2")
-    }
+pub fn pyobj_set_attro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
+    let ob_type = value.ob_type();
+    let typ = ob_type.pytype_typeobj_borrow();
+    typ.tp_setattro.as_ref().expect("No tp_setattro")(value, key, rvalue);
+}
+
+pub fn pyobj_generic_set_attro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
+    value.ob_dict.as_ref().expect("No ob_dict").pydict_update(key, rvalue);
 }

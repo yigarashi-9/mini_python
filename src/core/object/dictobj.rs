@@ -25,6 +25,7 @@ thread_local! (
             tp_len: Some(Rc::new(dict_len)),
             tp_call: None,
             tp_getattro: None,
+            tp_setattro: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,

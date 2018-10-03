@@ -102,7 +102,7 @@ impl Executable for SimpleStmt {
                     &Target::AttrTarget(ref lexpr, ref id) => {
                         let rv = rexpr.eval(Rc::clone(&env));
                         let lv = lexpr.eval(Rc::clone(&env));
-                        update_attr(&lv, id.clone(), rv);
+                        pyobj_set_attro(lv, PyObject::from_string(id.clone()), rv);
                     },
                     &Target::SubscrTarget(ref e1, ref e2) => {
                         let rv = rexpr.eval(Rc::clone(&env));

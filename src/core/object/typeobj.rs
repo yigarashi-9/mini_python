@@ -12,6 +12,7 @@ pub type UnaryOp = dyn Fn(Rc<PyObject>) -> Rc<PyObject>;
 pub type BinaryOp = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>;
 pub type VarArgFun = dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>;
 pub type GetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Option<Rc<PyObject>>;
+pub type SetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>, Rc<PyObject>) -> ();
 
 pub struct PyTypeObject {
     pub tp_name: String,
@@ -24,6 +25,7 @@ pub struct PyTypeObject {
     pub tp_len: Option<Rc<UnaryOp>>,
     pub tp_call: Option<Rc<VarArgFun>>,
     pub tp_getattro: Option<Rc<GetAttroFun>>,
+    pub tp_setattro: Option<Rc<SetAttroFun>>,
     pub tp_methods: Option<Vec<Rc<PyObject>>>,
     pub tp_dict: Option<Rc<PyObject>>,
     pub tp_bases: Option<Rc<PyObject>>,
@@ -44,6 +46,7 @@ thread_local! (
             tp_len: None,
             tp_call: Some(Rc::new(type_call)),
             tp_getattro: Some(Rc::new(type_getattro)),
+            tp_setattro: Some(Rc::new(type_setattro)),
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -81,6 +84,7 @@ impl PyObject {
             tp_len: None,
             tp_call: None,
             tp_getattro: None,
+            tp_setattro: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -208,6 +212,11 @@ pub fn type_getattro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObje
     }
 }
 
+pub fn type_setattro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
+    let tp_dict = value.pytype_tp_dict().expect("No tp_dict");
+    tp_dict.pydict_update(Rc::clone(&key), Rc::clone(&rvalue));
+    update_slot(Rc::clone(&value), pyobj_to_string(Rc::clone(&key)), Rc::clone(&rvalue));
+}
 
 fn pick_winner(mro_list: &Vec<Vec<Rc<PyObject>>>) -> Rc<PyObject> {
     for mro in mro_list {
@@ -354,7 +363,7 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
 
     let mro_obj = PyObject::pylist_from_vec(&mro);
     obj.pytype_typeobj_borrow_mut().tp_mro = Some(Rc::clone(&mro_obj));
-    update_attr(&obj, "__mro__".to_string(), mro_obj);
+    pyobj_set_attro(Rc::clone(&obj), PyObject::from_str("__mro__"), mro_obj);
 
     if let Some(ref dictobj) = obj.pytype_tp_dict() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
@@ -389,5 +398,10 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
     if obj.pytype_typeobj_borrow().tp_getattro.is_none() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
         typ.tp_getattro = Some(Rc::new(pyobj_generic_get_attro));
+    }
+
+    if obj.pytype_typeobj_borrow().tp_setattro.is_none() {
+        let mut typ = obj.pytype_typeobj_borrow_mut();
+        typ.tp_setattro = Some(Rc::new(pyobj_generic_set_attro));
     }
 }
