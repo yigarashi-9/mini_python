@@ -20,6 +20,8 @@ thread_local! (
                 tp_call: None,
                 tp_getattro: None,
                 tp_setattro: None,
+                tp_iter: None,
+                tp_iternext: None,
                 tp_methods: None,
                 tp_dict: None,
                 tp_bases: None,

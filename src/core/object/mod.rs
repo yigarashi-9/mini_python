@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use self::dictobj::PyDictObject;
 use self::funobj::PyFunObject;
-use self::listobj::PyListObject;
+use self::listobj::{PyListObject, PyListIterObject};
 use self::longobj::PyLongObject;
 use self::methodobj::PyMethodObject;
 use self::rustfunobj::PyRustFunObject;
@@ -28,6 +28,7 @@ pub enum PyInnerObject {
     FunObj(Rc<PyFunObject>),
     InstObj,
     ListObj(Rc<PyListObject>),
+    ListIterObj(Rc<RefCell<PyListIterObject>>),
     LongObj(Rc<PyLongObject>),
     MethodObj(Rc<PyMethodObject>),
     NoneObj,

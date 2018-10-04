@@ -43,6 +43,8 @@ fn ident_to_token(s: String) -> Token {
         "if" => Token::If,
         "else" => Token::Else,
         "while" => Token::While,
+        "for" => Token::For,
+        "in" => Token::In,
         "break" => Token::Break,
         "continue" => Token::Continue,
         "def" => Token::Def,

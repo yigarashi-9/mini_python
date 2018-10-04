@@ -86,6 +86,24 @@ pub trait Executable {
     fn exec(&self, env: Rc<Env>) -> CtrlOp;
 }
 
+fn bind_expr(target: &Target, rv: Rc<PyObject>, env: Rc<Env>) {
+    match target {
+        &Target::IdentTarget(ref id) => {
+            env.update(id.clone(), rv);
+        },
+        &Target::AttrTarget(ref lexpr, ref id) => {
+            let lv = lexpr.eval(Rc::clone(&env));
+            pyobj_set_attro(lv, PyObject::from_string(id.clone()), rv);
+        },
+        &Target::SubscrTarget(ref e1, ref e2) => {
+            let v1 = e1.eval(Rc::clone(&env));
+            let v2 = e2.eval(Rc::clone(&env));
+            v1.pydict_update(v2, rv);
+        },
+        _ => panic!("Syntax Error: bind_expr"),
+    }
+}
+
 impl Executable for SimpleStmt {
     fn exec(&self, env: Rc<Env>) -> CtrlOp {
         match self {
@@ -94,23 +112,8 @@ impl Executable for SimpleStmt {
                 CtrlOp::Nop
             },
             &SimpleStmt::AssignStmt(ref target, ref rexpr) => {
-                match target {
-                    &Target::IdentTarget(ref id) => {
-                        let v = rexpr.eval(Rc::clone(&env));
-                        env.update(id.clone(), v);
-                    },
-                    &Target::AttrTarget(ref lexpr, ref id) => {
-                        let rv = rexpr.eval(Rc::clone(&env));
-                        let lv = lexpr.eval(Rc::clone(&env));
-                        pyobj_set_attro(lv, PyObject::from_string(id.clone()), rv);
-                    },
-                    &Target::SubscrTarget(ref e1, ref e2) => {
-                        let rv = rexpr.eval(Rc::clone(&env));
-                        let v1 = e1.eval(Rc::clone(&env));
-                        let v2 = e2.eval(Rc::clone(&env));
-                        v1.pydict_update(v2, rv);
-                    },
-                };
+                let rv = rexpr.eval(Rc::clone(&env));
+                bind_expr(target, rv, env);
                 CtrlOp::Nop
             },
             &SimpleStmt::ReturnStmt(ref expr) => {
@@ -149,7 +152,27 @@ impl Executable for CompoundStmt {
                     }
                 };
                 CtrlOp::Nop
-            }
+            },
+            &CompoundStmt::ForStmt(ref target, ref expr, ref prog) => {
+                let v = expr.eval(Rc::clone(&env));
+                let iterfun = v.ob_type().pytype_tp_iter().expect("Iterator expected, no __iter__");
+                let it = iterfun(Rc::clone(&v));
+                loop {
+                    let nextfun = it.ob_type().pytype_tp_iternext().expect("Iterator expected, no __next__");
+                    match nextfun(Rc::clone(&it)) {
+                        Some(next) => {
+                            bind_expr(target, next, Rc::clone(&env));
+                            match prog.exec(Rc::clone(&env)) {
+                                CtrlOp::Return(e) => return CtrlOp::Return(e),
+                                CtrlOp::Break => break,
+                                _ => continue,
+                            }
+                        },
+                        None => break
+                    }
+                };
+                CtrlOp::Nop
+            },
             &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
                 let funv = PyObject::pyfun_new(&env, parms, prog);
                 Rc::clone(&env).update(id.clone(), funv);

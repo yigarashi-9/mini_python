@@ -26,6 +26,7 @@ target ->
 compound_stmt ->
   | If expr Colon NewLine block Else block
   | While expr Colon NewLine block
+  | For target In Expr Colon NewLine block
   | Def Ident(s) LParen parm_list RParen Colon NewLine block
   | Class Ident(s) LParen (expr, ..., expr) RParen Colon NewLine block
 
@@ -76,6 +77,7 @@ pub trait TokenStream {
     fn compound_stmt(&mut self) -> CompoundStmt;
     fn if_stmt(&mut self) -> CompoundStmt;
     fn while_stmt(&mut self) -> CompoundStmt;
+    fn for_stmt(&mut self) -> CompoundStmt;
     fn def_stmt(&mut self) -> CompoundStmt;
     fn class_stmt(&mut self) -> CompoundStmt;
     fn parm_list(&mut self) -> Vec<Id>;
@@ -193,6 +195,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         match self.peek() {
             Some(&Token::If) => true,
             Some(&Token::While) => true,
+            Some(&Token::For) => true,
             Some(&Token::Def) => true,
             Some(&Token::Class) => true,
             _ => false,
@@ -203,6 +206,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         match self.peek() {
             Some(&Token::If) => self.if_stmt(),
             Some(&Token::While) => self.while_stmt(),
+            Some(&Token::For) => self.for_stmt(),
             Some(&Token::Def) => self.def_stmt(),
             Some(&Token::Class) => self.class_stmt(),
             _ => panic!("Parse Error: compound_stmt"),
@@ -229,6 +233,22 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
         self.consume(Token::NewLine);
         let prog = self.block();
         CompoundStmt::WhileStmt(expr, prog)
+    }
+
+    fn for_stmt(&mut self) -> CompoundStmt {
+        self.consume(Token::For);
+        let target = match self.expr() {
+            Expr::VarExpr(id) => Target::IdentTarget(id),
+            Expr::AttrExpr(expr, id) => Target::AttrTarget(expr, id),
+            Expr::SubscrExpr(expr1, expr2) => Target::SubscrTarget(expr1, expr2),
+            _ => panic!("Parse Error: Assign Target")
+        };
+        self.consume(Token::In);
+        let expr = self.expr();
+        self.consume(Token::Colon);
+        self.consume(Token::NewLine);
+        let prog = self.block();
+        CompoundStmt::ForStmt(target, expr, prog)
     }
 
     fn def_stmt(&mut self) -> CompoundStmt {

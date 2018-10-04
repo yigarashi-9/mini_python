@@ -44,6 +44,8 @@ thread_local! (
             tp_call: None,
             tp_getattro: None,
             tp_setattro: None,
+            tp_iter: Some(Rc::new(list_iter)),
+            tp_iternext: None,
             tp_methods: Some(tp_methods),
             tp_dict: None,
             tp_bases: None,
@@ -119,5 +121,77 @@ pub fn pylist_append(slf: Rc<PyObject>, elm: Rc<PyObject>) -> Rc<PyObject> {
             PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
         },
         _ => panic!("Type Error: pylist_append")
+    }
+}
+
+pub struct PyListIterObject {
+    it_index: usize,
+    it_seq: Rc<PyObject>,
+}
+
+thread_local! (
+    pub static PY_LISTITER_TYPE: Rc<PyObject> = {
+        let itertp = PyTypeObject {
+            tp_name: "listiter".to_string(),
+            tp_base: None,
+            tp_hash: None,
+            tp_bool: None,
+            tp_fun_eq: None,
+            tp_fun_add: None,
+            tp_fun_lt: None,
+            tp_len: None,
+            tp_call: None,
+            tp_getattro: None,
+            tp_setattro: None,
+            tp_iter: None,
+            tp_iternext: Some(Rc::new(listiter_next)),
+            tp_methods: None,
+            tp_dict: None,
+            tp_bases: None,
+            tp_mro: None,
+            tp_subclasses: None,
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+            ob_dict: None,
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(itertp))),
+        })
+    }
+);
+
+impl PyObject {
+    pub fn pylistiter_check(&self) -> bool {
+        PY_LISTITER_TYPE.with(|tp| { (&self.ob_type).as_ref() == Some(tp) })
+    }
+}
+
+pub fn list_iter(slf: Rc<PyObject>) -> Rc<PyObject> {
+    if !slf.pylist_check() { panic!("Type Error: pylist_iter") };
+    Rc::new(PyObject {
+        ob_type: PY_LISTITER_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+        ob_dict: None,
+        inner: PyInnerObject::ListIterObj(Rc::new(RefCell::new(
+            PyListIterObject {
+                it_index: 0,
+                it_seq: slf,
+            }
+        )))
+    })
+}
+
+pub fn listiter_next(slf: Rc<PyObject>) -> Option<Rc<PyObject>> {
+    if !slf.pylistiter_check() { panic!("Type Error: listiter_next") };
+    match slf.inner {
+        PyInnerObject::ListIterObj(ref it) => {
+            let mut it = it.borrow_mut();
+            if it.it_index >= it.it_seq.pylist_size() {
+                None
+            } else {
+                let res = it.it_seq.pylist_getitem(it.it_index);
+                it.it_index += 1;
+                Some(res)
+            }
+        },
+        _ => panic!("Type Error: listiter_next"),
     }
 }

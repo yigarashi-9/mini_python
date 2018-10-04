@@ -13,6 +13,8 @@ pub type BinaryOp = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>;
 pub type VarArgFun = dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>;
 pub type GetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Option<Rc<PyObject>>;
 pub type SetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>, Rc<PyObject>) -> ();
+pub type GetIterFun = dyn Fn(Rc<PyObject>) -> Rc<PyObject>;
+pub type IterNextFun = dyn Fn(Rc<PyObject>) -> Option<Rc<PyObject>>;
 
 pub struct PyTypeObject {
     pub tp_name: String,
@@ -26,6 +28,8 @@ pub struct PyTypeObject {
     pub tp_call: Option<Rc<VarArgFun>>,
     pub tp_getattro: Option<Rc<GetAttroFun>>,
     pub tp_setattro: Option<Rc<SetAttroFun>>,
+    pub tp_iter: Option<Rc<GetIterFun>>,
+    pub tp_iternext: Option<Rc<IterNextFun>>,
     pub tp_methods: Option<Vec<Rc<PyObject>>>,
     pub tp_dict: Option<Rc<PyObject>>,
     pub tp_bases: Option<Rc<PyObject>>,
@@ -47,6 +51,8 @@ thread_local! (
             tp_call: Some(Rc::new(type_call)),
             tp_getattro: Some(Rc::new(type_getattro)),
             tp_setattro: Some(Rc::new(type_setattro)),
+            tp_iter: None,
+            tp_iternext: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -85,6 +91,8 @@ impl PyObject {
             tp_call: None,
             tp_getattro: None,
             tp_setattro: None,
+            tp_iter: None,
+            tp_iternext: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,
@@ -116,6 +124,20 @@ impl PyObject {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict.clone(),
             _ => panic!("Type Error: pytype_tp_dict")
+        }
+    }
+
+    pub fn pytype_tp_iter(&self) -> Option<Rc<GetIterFun>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_iter.clone(),
+            _ => panic!("Type Error: pytype_tp_iter")
+        }
+    }
+
+    pub fn pytype_tp_iternext(&self) -> Option<Rc<IterNextFun>> {
+        match self.inner {
+            PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_iternext.clone(),
+            _ => panic!("Type Error: pytype_tp_iternext")
         }
     }
 

@@ -68,5 +68,6 @@ test_cases![
     builtin_len,
     inheritance_simple, inheritance_complex,
     bool_arith,
-    type_call
+    type_call,
+    for_stmt
 ];

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use object::{PyObject, PyInnerObject};
+use object::generic::*;
 use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 use object::pyhashmap::PyHashMap;
 
@@ -24,8 +25,10 @@ thread_local! (
             tp_fun_lt: None,
             tp_len: Some(Rc::new(dict_len)),
             tp_call: None,
-            tp_getattro: None,
+            tp_getattro: Some(Rc::new(pyobj_get_attro)),
             tp_setattro: None,
+            tp_iter: None,
+            tp_iternext: None,
             tp_methods: None,
             tp_dict: None,
             tp_bases: None,

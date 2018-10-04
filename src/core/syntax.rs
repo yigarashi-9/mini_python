@@ -59,6 +59,7 @@ pub enum SimpleStmt {
 pub enum CompoundStmt {
     IfStmt(Expr, Program, Program),
     WhileStmt(Expr, Program),
+    ForStmt(Target, Expr, Program),
     DefStmt(Id, Vec<Id>, Program),
     ClassStmt(Id, Vec<Expr>, Program)
 }
