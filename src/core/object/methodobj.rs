@@ -4,13 +4,11 @@ use std::rc::Rc;
 use env::Env;
 use object::{PyObject, PyInnerObject};
 use object::typeobj::*;
-use syntax::{Id, Program};
 
 pub struct PyMethodObject {
     pub ob_self: Rc<PyObject>,
     pub env: Rc<Env>,
-    pub parms: Vec<Id>,
-    pub code: Program,
+    pub codeobj: Rc<PyObject>,
 }
 
 thread_local! (

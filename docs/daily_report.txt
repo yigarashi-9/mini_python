@@ -173,8 +173,70 @@ PyObject_GenericGetAttr は descriptor の get を呼び出して self をバイ
 type_getattro は descriptor の get を呼ばず，methoddescr_call を使うことになる
 
 
+10/3
+
+tp_setattro を実装し update_attr をリファクタリング
+
+
+10/4
+
+for stmt の実装方法を調査
+tp_iter と tp_iternext を実装して iterator 型を作る
+シーケンス型ごとに hogeiterobj hogeitertype を定義して実装する
+StopIteration 例外はあとから考えればよい
+iternext が None を返したら停止という形で実装すればよい
+__iter__ と __next__ を実装できるようにする
+
+
+10/9
+
+異常系をちゃんとしたい
+インタプリタの異常系は全て例外機構で巻き取られる
+try-catch の大域脱出をASTを直接実行するコードで書くのは結構しんどい
+このあたりでスタックマシンに切り替えるのが良いのでは
+大域脱出に関わるコードブロックを積んでおいて，
+大域脱出するときに一通り pop して try か空だったら進めるといったアルゴリズム
+
+
+10/10
+
+スタックマシンの実装
+opcodes へのコンパイル
+PyCodeObject の実装（関数に必要
+
+
+10/11
+
+for を break で抜けた場合に stack に iter オブジェクトが残る気がするので調査
+- SETUP_LOOP でブロックが始まる時のstack levelを覚えておいてPOP_BLOCK or break で戻す
+
+block に相対アドレスを持っていたら break で抜けた時とかに困るのでは？
+- block には絶対アドレスを計算して格納してそう
+
+相対アドレスと絶対アドレスで持っているところの違いはなんなのだろうか
+
+continue の戻りアドレスを真面目に埋め込まないといけない
+for と while があるので SETUP_LOOP から戻るべきアドレスまでの差分が等しいとは限らない
+
+
+10/12
+
+MakeFunction と MakeClass を実装して VM を動かす
+
+
+10/13
+
+例外機構を実装
+異常系を Python の例外とする
+
+
 その他タスク
 - generic で直接 PyInner を操作している部分を修正
   - call_function は例外
-- for stmt の実装
 - tp_*** を tp_dict に突っ込む
+- tp_str tp_repr を実装して print を実装 / pyobj_to_string もリファクタリングできる
+- parser は trait で良いのか？
+- Get/SetAttr と Get/SetItem を区別しないといけない
+- module を実装
+- 例外機構の実装 スタックトレースは別で
+- 特定の PyObject をいじっているときに型に情報が現れないのは気持ち悪い

@@ -1,46 +1,13 @@
 extern crate core;
 
-use std::fs::File;
-use std::io::BufReader;
-use std::io::prelude::*;
-use std::rc::Rc;
-
-use core::lexer::*;
-use core::parser::*;
-use core::env::Env;
-use core::eval::*;
-use core::builtinmodule::*;
-
-fn run_prog_string(prog: String) {
-    match tokenize(prog) {
-        Ok(tokens) => {
-            let program = tokens.into_iter().peekable().parse();
-            let env = Rc::new(Env::new());
-            load_builtins(Rc::clone(&env));
-            match program.exec(env) {
-                CtrlOp::Nop => (),
-                _ => panic!("InvalidCtrlOp")
-            }
-        },
-        Err(err) => panic!(err.to_string()),
-    }
-}
-
-fn run(file_name: &str) {
-    let path = ["tests/tests/", file_name, ".py"].join("");
-    let file = File::open(path).unwrap();
-    let mut buf_reader = BufReader::new(file);
-    let mut prog = String::new();
-    buf_reader.read_to_string(&mut prog).expect("Error: read_to_string");
-    run_prog_string(prog)
-}
+use core::util::*;
 
 macro_rules! test_cases {
     ( $( $i:ident ), * ) => {
         $(
             #[test]
             fn $i() {
-                run(stringify!($i))
+                run(&["tests/tests/", stringify!($i), ".py"].join(""))
             }
         )*
     }

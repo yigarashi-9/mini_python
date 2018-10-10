@@ -1,4 +1,5 @@
 pub mod boolobj;
+pub mod codeobj;
 pub mod dictobj;
 pub mod funobj;
 pub mod generic;
@@ -14,6 +15,7 @@ pub mod typeobj;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use self::codeobj::PyCodeObject;
 use self::dictobj::PyDictObject;
 use self::funobj::PyFunObject;
 use self::listobj::{PyListObject, PyListIterObject};
@@ -24,6 +26,7 @@ use self::strobj::PyStringObject;
 use self::typeobj::PyTypeObject;
 
 pub enum PyInnerObject {
+    CodeObj(Rc<PyCodeObject>),
     DictObj(Rc<PyDictObject>),
     FunObj(Rc<PyFunObject>),
     InstObj,
