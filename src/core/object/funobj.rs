@@ -4,12 +4,12 @@ use std::rc::Rc;
 use env::Env;
 use object::*;
 use object::typeobj::*;
-use syntax::{Id, Program};
+use syntax::Id;
+use opcode::Code;
 
 pub struct PyFunObject {
     pub env: Rc<Env>,
-    pub parms: Vec<Id>,
-    pub code: Program,
+    pub codeobj: Rc<PyObject>,
 }
 
 thread_local! (
@@ -43,15 +43,28 @@ thread_local! (
 );
 
 impl PyObject {
-    pub fn pyfun_new(env: &Rc<Env>, parms: &Vec<Id>, code: &Program) -> Rc<PyObject>{
+    pub fn pyfun_new(env: &Rc<Env>, codeobj: Rc<PyObject>) -> Rc<PyObject> {
         Rc::new(PyObject {
             ob_type: PY_FUN_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
             ob_dict: None,
             inner: PyInnerObject::FunObj(Rc::new(PyFunObject {
                 env: Rc::clone(env),
-                parms: parms.clone(),
-                code: code.clone(),
+                codeobj: codeobj,
             }))
         })
+    }
+
+    pub fn pyfun_code(self: Rc<Self>) -> Code {
+        match self.inner {
+            PyInnerObject::FunObj(ref obj) => obj.codeobj.pycode_code(),
+            _ => panic!("Type Error: pyfun_code")
+        }
+    }
+
+    pub fn pyfun_argnames(self: Rc<Self>) -> Vec<Id> {
+        match self.inner {
+            PyInnerObject::FunObj(ref obj) => obj.codeobj.pycode_argnames(),
+            _ => panic!("Type Error: pyfun_code")
+        }
     }
 }

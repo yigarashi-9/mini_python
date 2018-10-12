@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use eval::{CtrlOp, Executable};
+use eval::{eval};
 use env::*;
 use object::*;
 use object::boolobj::*;
@@ -9,7 +9,7 @@ use object::noneobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
-pub fn pyobj_is_bool(v: Rc<PyObject>) -> bool {
+pub fn pyobj_to_bool(v: Rc<PyObject>) -> bool {
     let ob_type = v.ob_type();
     let typ = ob_type.pytype_typeobj_borrow();
     match typ.tp_bool.as_ref() {
@@ -48,21 +48,15 @@ pub fn pyobj_to_string(v: Rc<PyObject>) -> String {
 pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
     match funv.inner {
         PyInnerObject::FunObj(ref fun) => {
-            match fun.code.exec(Rc::new(Env::new_child(&fun.env, &fun.parms, args))) {
-                CtrlOp::Nop => PyObject::none_obj(),
-                CtrlOp::Return(val) => val,
-                _ => panic!("Invalid control operator"),
-            }
+            eval(&fun.codeobj.pycode_code(),
+                 Rc::new(Env::new_child(&fun.env, &fun.codeobj.pycode_argnames(), args)))
         },
         PyInnerObject::MethodObj(ref method) => {
             let mut vals = vec![Rc::clone(&method.ob_self)];
             let mut args = args.clone();
             vals.append(&mut args);
-            match method.code.exec(Rc::new(Env::new_child(&method.env, &method.parms, &vals))) {
-                CtrlOp::Nop => PyObject::none_obj(),
-                CtrlOp::Return(val) => val,
-                _ => panic!("Invalid control operator"),
-            }
+            eval(&method.codeobj.pycode_code(),
+                 Rc::new(Env::new_child(&method.env, &method.codeobj.pycode_argnames(), &vals)))
         },
         PyInnerObject::RustFunObj(ref obj) => {
             match obj.rust_fun {
@@ -93,19 +87,15 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
 pub fn bind_self(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
     match value.inner {
         PyInnerObject::FunObj(ref fun) => {
-            PY_METHOD_TYPE.with(|tp| {
-                Rc::new(PyObject {
-                    ob_type: Some(Rc::clone(tp)),
-                    ob_dict: None,
-                    inner: PyInnerObject::MethodObj(Rc::new(
-                        PyMethodObject {
-                            ob_self: Rc::clone(&slf),
-                            env: Rc::clone(&fun.env),
-                            parms: fun.parms.clone(),
-                            code: fun.code.clone(),
-                        }
-                    ))
-                })
+            Rc::new(PyObject {
+                ob_type: PY_METHOD_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
+                ob_dict: None,
+                inner: PyInnerObject::MethodObj(Rc::new(
+                    PyMethodObject {
+                        ob_self: Rc::clone(&slf),
+                        env: Rc::clone(&fun.env),
+                        codeobj: Rc::clone(&fun.codeobj),
+                    }))
             })
         },
         PyInnerObject::RustFunObj(ref obj) => {
