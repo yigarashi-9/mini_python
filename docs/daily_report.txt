@@ -224,10 +224,21 @@ for と while があるので SETUP_LOOP から戻るべきアドレスまでの
 MakeFunction と MakeClass を実装して VM を動かす
 
 
-10/13
+10/15
 
 例外機構を実装
-異常系を Python の例外とする
+
+- parser.rs
+  - try except
+  - raise
+- compile / eval
+
+
+10/17
+
+PyExcObject の実装
+例外ごとに PyInnerObject を作るのは大変だけど他の方法ある？
+error.rs の実装
 
 
 その他タスク
@@ -238,5 +249,5 @@ MakeFunction と MakeClass を実装して VM を動かす
 - parser は trait で良いのか？
 - Get/SetAttr と Get/SetItem を区別しないといけない
 - module を実装
-- 例外機構の実装 スタックトレースは別で
 - 特定の PyObject をいじっているときに型に情報が現れないのは気持ち悪い
+- 異常系を真面目に書く
