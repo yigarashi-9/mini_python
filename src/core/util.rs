@@ -9,6 +9,7 @@ use parser::*;
 use compile::*;
 use env::Env;
 use eval::*;
+use error::*;
 use builtinmodule::*;
 
 pub fn run_prog_string(prog: String) {
@@ -18,6 +19,7 @@ pub fn run_prog_string(prog: String) {
             let code = compile(&ast);
             // print_code(&code);
             let env = Rc::new(Env::new());
+            pyerr_clear();
             load_builtins(Rc::clone(&env));
             eval(&code, env);
         },

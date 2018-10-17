@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use opcode::*;
 use env::*;
+use error::*;
 
 use object::*;
 use object::generic::*;
@@ -14,11 +15,13 @@ enum Why {
     WhyReturn,
     WhyBreak,
     WhyContinue,
+    WhyException,
 }
 
 #[derive(PartialEq)]
 enum BlockType {
     LoopBlock,
+    TryBlock,
 }
 
 struct Block {
@@ -68,7 +71,7 @@ impl StackMachine {
         }
     }
 
-    fn exec(&mut self, code: &Code, env: Rc<Env>) -> Rc<PyObject> {
+    fn exec(&mut self, code: &Code, env: Rc<Env>) -> Option<Rc<PyObject>> {
         let mut retval = None;
         let mut why = Why::WhyNot;
 
@@ -135,9 +138,14 @@ impl StackMachine {
                 &Opcode::CallFunction(argcnt) => {
                     let args = self.pop_as_vec(argcnt);
                     let fun = self.pop();
-                    self.push(call_func(fun, &args));
-                    self.pc += 1;
-                    continue;
+
+                    if let Some(res) = call_func(fun, &args) {
+                        self.push(res);
+                        self.pc += 1;
+                        continue;
+                    } else {
+                        retval = None;
+                    }
                 },
                 &Opcode::ReturnValue => {
                     retval = Some(self.pop());
@@ -258,6 +266,26 @@ impl StackMachine {
                         }
                     }
                 },
+                &Opcode::SetupExcept(offset) => {
+                    self.blocks.push(Block {
+                        b_type: BlockType::TryBlock,
+                        b_handler: self.pc + offset,
+                        b_level: self.stack.len(),
+                    });
+                    self.pc += 1;
+                    continue;
+                },
+                &Opcode::Raise => {
+                    let mut exc = self.pop();
+
+                    if PyObject::pyexc_is_exc_subclass(Rc::clone(&exc)) {
+                        exc = type_call(exc, &vec![]);
+                    } else if !PyObject::pyexc_is_exc_instance(Rc::clone(&exc)) {
+                        panic!("Type Error: Raise")
+                    }
+                    pyerr_set(exc);
+                    why = Why::WhyException;
+                },
                 &Opcode::PopBlock => {
                     let block = self.blocks.pop().unwrap();
                     self.unwind_stack(block.b_level);
@@ -295,14 +323,10 @@ impl StackMachine {
                     self.pc += 1;
                     continue;
                 },
-
-                &Opcode::Panic => {
-                    panic!("Panic Inst");
-                }
             }
 
             if why == Why::WhyNot {
-                panic!("Implementation Error")
+                why = Why::WhyException;
             }
 
             while self.blocks.len() > 0 {
@@ -327,6 +351,14 @@ impl StackMachine {
                     break;
                 }
 
+                if block.b_type == BlockType::TryBlock && why == Why::WhyException {
+                    if !pyerr_occurred() { panic!("Implementation Error: try block") };
+                    pyerr_clear();
+                    why = Why::WhyNot;
+                    self.pc = block.b_handler;
+                    break;
+                }
+
                 // why == WhyReturn
             }
 
@@ -334,17 +366,11 @@ impl StackMachine {
                 break;
             }
         }
-
-        if why != Why::WhyReturn || retval.is_none() {
-            panic!("Main loop shoud end with WhyReturn");
-        }
-
-        // why == WhyReturn
-        retval.unwrap()
+        retval
     }
 }
 
-pub fn eval(code: &Code, env: Rc<Env>) -> Rc<PyObject> {
+pub fn eval(code: &Code, env: Rc<Env>) -> Option<Rc<PyObject>> {
     let mut stack_machine = StackMachine::new();
     stack_machine.exec(code, env)
 }

@@ -106,6 +106,10 @@ impl PyObject {
         })
     }
 
+    pub fn pytype_check(&self) -> bool {
+        PY_TYPE_TYPE.with(|tp| { (&self.ob_type).as_ref() == Some(tp) })
+    }
+
     pub fn pytype_typeobj_borrow(&self) -> Ref<PyTypeObject> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow(),
@@ -182,7 +186,7 @@ impl PyTypeObject {
     }
 }
 
-fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+pub fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
 
     if PY_TYPE_TYPE.with(|tp| { tp == &typ }) {
         if args.len() == 1 {
@@ -199,7 +203,7 @@ fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
         inner: PyInnerObject::InstObj,
     });
     match pyobj_generic_get_attro(Rc::clone(&instance), PyObject::from_str("__init__")) {
-        Some(init_fun) => call_func(Rc::clone(&init_fun), args),
+        Some(init_fun) => call_func(Rc::clone(&init_fun), args).expect("type_call"),
         None => PyObject::none_obj()
     };
     instance
@@ -215,10 +219,13 @@ pub fn type_getattro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObje
 
                 let mut ret_val = None;
                 for i in 0..(mro.pylist_size()) {
-                    let tmp = mro.pylist_getitem(i).pytype_tp_dict().as_ref().unwrap().pydict_lookup(Rc::clone(&key));
-                    if tmp.is_some() {
-                        ret_val = tmp;
-                        break;
+                    let base = mro.pylist_getitem(i);
+                    if let Some(ref dict) = base.pytype_tp_dict() {
+                        let tmp = dict.pydict_lookup(Rc::clone(&key));
+                        if tmp.is_some() {
+                            ret_val = tmp;
+                            break;
+                        }
                     }
                 };
                 ret_val
@@ -286,7 +293,8 @@ fn linearlize(arg: Vec<Vec<Rc<PyObject>>>) -> Vec<Rc<PyObject>> {
 
 fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
     Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>> {
-        Rc::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
+        // TODO: Error handling
+        Rc::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]).expect("unaryop_from_pyobj"))
     }
 
 fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
@@ -296,7 +304,8 @@ fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
 
 fn binop_from_pyobj(obj: Rc<PyObject>) ->
     Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
-        Rc::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
+        // TODO: Error handling
+        Rc::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]).expect("binop_from_pyobj"))
     }
 
 fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
@@ -381,6 +390,9 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
         mro.insert(0, Rc::clone(&obj));
     } else {
         mro.push(Rc::clone(&obj));
+        if let Some(ref base) = obj.pytype_tp_base() {
+            mro.push(Rc::clone(&base));
+        }
     }
 
     let mro_obj = PyObject::pylist_from_vec(&mro);

@@ -120,13 +120,19 @@ fn compile_simple_stmt(stmt: &SimpleStmt, addr_info: AddrInfo) -> Code {
             } else {
                 panic!("continue outside loop block")
             }
-        }
+        },
+        &SimpleStmt::RaiseStmt(ref expr) => {
+            code.append(&mut compile_expr(expr));
+            code.push(Opcode::Raise);
+        },
         &SimpleStmt::AssertStmt(ref expr) => {
             let mut expr_code = compile_expr(expr);
-            let pop_jump_addr = addr_info.start + expr_code.len() + 2;
+            let pop_jump_addr = addr_info.start + expr_code.len() + 3;
+
             code.append(&mut expr_code);
             code.push(Opcode::PopJumpIfTrue(pop_jump_addr));
-            code.push(Opcode::Panic);
+            code.push(Opcode::LoadName("Exception".to_string()));
+            code.push(Opcode::Raise);
         }
     };
     code
@@ -188,6 +194,20 @@ fn compile_compound_stmt(stmt: &CompoundStmt, addr_info: AddrInfo) -> Code {
             code.append(&mut body_code);
             code.push(Opcode::JumpAbsolute(for_iter_addr));
             code.push(Opcode::PopBlock);
+        },
+        &CompoundStmt::TryStmt(ref prog_try, ref prog_except) => {
+            let mut addr = addr_info.start + 1;
+            let mut try_code = compile_program(prog_try, addr_info.change_start(addr));
+            addr += try_code.len() + 2;
+            let exc_jump_addr = addr;
+            let mut exc_code = compile_program(prog_except, addr_info.change_start(addr));
+            addr += exc_code.len();
+
+            code.push(Opcode::SetupExcept(exc_jump_addr - addr_info.start));
+            code.append(&mut try_code);
+            code.push(Opcode::PopBlock);
+            code.push(Opcode::JumpAbsolute(addr));
+            code.append(&mut exc_code);
         },
         &CompoundStmt::DefStmt(ref id, ref parms, ref prog) => {
             let body_code = compile(prog);

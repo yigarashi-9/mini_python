@@ -32,11 +32,12 @@ pub enum Opcode {
     SetupLoop(Offset),
     BreakLoop,
     ContinueLoop(Addr),
+    SetupExcept(Offset),
+    Raise,
     GetIter,
     ForIter(Addr),
     PopBlock,
     MakeClass(usize),
-    Panic,
 }
 
 impl fmt::Display for Opcode {
@@ -63,12 +64,13 @@ impl fmt::Display for Opcode {
             &Opcode::JumpAbsolute(addr) => write!(f, "{} {}", "JumpAbsolute", addr),
             &Opcode::SetupLoop(offset) => write!(f, "{} {}", "SetupLoop", offset),
             &Opcode::BreakLoop => write!(f, "{}", "BreakLoop"),
-            &Opcode::ContinueLoop(addr)=> write!(f, "{} {}", "ContinueLoop", addr),
-            &Opcode::GetIter=> write!(f, "{}", "GetIter"),
-            &Opcode::ForIter(addr)=> write!(f, "{} {}", "ForIter", addr),
-            &Opcode::PopBlock=> write!(f, "{}", "PopBlock"),
+            &Opcode::ContinueLoop(addr) => write!(f, "{} {}", "ContinueLoop", addr),
+            &Opcode::GetIter => write!(f, "{}", "GetIter"),
+            &Opcode::ForIter(addr) => write!(f, "{} {}", "ForIter", addr),
+            &Opcode::SetupExcept(offset) => write!(f, "{} {}", "SetupExcept", offset),
+            &Opcode::Raise => write!(f, "{}", "Raise"),
+            &Opcode::PopBlock => write!(f, "{}", "PopBlock"),
             &Opcode::MakeClass(nbases)=> write!(f, "{} {}", "MakeClass", nbases),
-            &Opcode::Panic=> write!(f, "{}", "Panic"),
         }
     }
 }

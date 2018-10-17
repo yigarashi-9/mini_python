@@ -45,7 +45,36 @@ pub fn pyobj_to_string(v: Rc<PyObject>) -> String {
     }
 }
 
-pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+pub fn pyobj_issubclass(v: Rc<PyObject>, typ: Rc<PyObject>) -> bool {
+    if !PyObject::pytype_check(&v) { return false }
+
+    match v.pytype_tp_mro() {
+        Some(ref tp_mro) => {
+            for i in 0..(tp_mro.pylist_size()) {
+                let base = tp_mro.pylist_getitem(i);
+                if base == typ { return true; }
+            };
+            false
+        },
+        None => panic!("Implementation Error: pyobj_issubclass")
+    }
+}
+
+pub fn pyobj_isinstance(v: Rc<PyObject>, typ: Rc<PyObject>) -> bool {
+    let v_type = v.ob_type();
+    match v_type.pytype_tp_mro() {
+        Some(ref tp_mro) => {
+            for i in 0..(tp_mro.pylist_size()) {
+                let base = tp_mro.pylist_getitem(i);
+                if base == typ { return true; }
+            };
+            false
+        },
+        None => false
+    }
+}
+
+pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Option<Rc<PyObject>> {
     match funv.inner {
         PyInnerObject::FunObj(ref fun) => {
             eval(&fun.codeobj.pycode_code(),
@@ -69,7 +98,7 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
                         Some(ref slf) => Rc::clone(slf),
                         None => PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
                     };
-                    (*fun)(slf, Rc::clone(&args[0]))
+                    Some((*fun)(slf, Rc::clone(&args[0])))
                 }
             }
         },
@@ -77,7 +106,7 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
             let ob_type = funv.ob_type();
             let typ = ob_type.pytype_typeobj_borrow();
             match typ.tp_call {
-                Some(ref tp_call) => tp_call(Rc::clone(&funv), args),
+                Some(ref tp_call) => Some(tp_call(Rc::clone(&funv), args)),
                 None => panic!("Type Error: Callable expected"),
             }
         }

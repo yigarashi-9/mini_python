@@ -16,6 +16,7 @@ simple_stmt ->
   | Return expr?
   | Continue
   | Break
+  | Raise expr
   | Assert expr
 
 target ->
@@ -24,9 +25,10 @@ target ->
   | cexpr LBrace expr RBrace
 
 compound_stmt ->
-  | If expr Colon NewLine block Else block
+  | If expr Colon NewLine block Else Colon NewLine block
   | While expr Colon NewLine block
   | For target In Expr Colon NewLine block
+  | Try Colon NewLine block Except Colon NewLine block
   | Def Ident(s) LParen parm_list RParen Colon NewLine block
   | Class Ident(s) LParen (expr, ..., expr) RParen Colon NewLine block
 
@@ -75,11 +77,6 @@ pub trait TokenStream {
     fn simple_stmt(&mut self) -> SimpleStmt;
     fn is_compound(&mut self) -> bool;
     fn compound_stmt(&mut self) -> CompoundStmt;
-    fn if_stmt(&mut self) -> CompoundStmt;
-    fn while_stmt(&mut self) -> CompoundStmt;
-    fn for_stmt(&mut self) -> CompoundStmt;
-    fn def_stmt(&mut self) -> CompoundStmt;
-    fn class_stmt(&mut self) -> CompoundStmt;
     fn parm_list(&mut self) -> Vec<Id>;
     fn expr(&mut self) -> Expr;
     fn eexpr(&mut self) -> Expr;
@@ -155,6 +152,11 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
                 self.consume(Token::Continue);
                 SimpleStmt::ContinueStmt
             },
+            Some(&Token::Raise) => {
+                self.consume(Token::Raise);
+                let expr = self.expr();
+                SimpleStmt::RaiseStmt(expr)
+            },
             Some(&Token::Return) => {
                 self.consume(Token::Return);
                 let mut expr = Expr::NoneExpr;
@@ -196,6 +198,7 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
             Some(&Token::If) => true,
             Some(&Token::While) => true,
             Some(&Token::For) => true,
+            Some(&Token::Try) => true,
             Some(&Token::Def) => true,
             Some(&Token::Class) => true,
             _ => false,
@@ -204,80 +207,81 @@ impl<I: Iterator<Item = Token>> TokenStream for Peekable<I> {
 
     fn compound_stmt(&mut self) -> CompoundStmt {
         match self.peek() {
-            Some(&Token::If) => self.if_stmt(),
-            Some(&Token::While) => self.while_stmt(),
-            Some(&Token::For) => self.for_stmt(),
-            Some(&Token::Def) => self.def_stmt(),
-            Some(&Token::Class) => self.class_stmt(),
+            Some(&Token::If) => {
+                self.consume(Token::If);
+                let expr = self.expr();
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog_then = self.block();
+                self.consume(Token::Else);
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog_else = self.block();
+                CompoundStmt::IfStmt(expr, prog_then, prog_else)
+            },
+            Some(&Token::While) => {
+                self.consume(Token::While);
+                let expr = self.expr();
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog = self.block();
+                CompoundStmt::WhileStmt(expr, prog)
+            },
+            Some(&Token::For) => {
+                self.consume(Token::For);
+                let target = match self.expr() {
+                    Expr::VarExpr(id) => Target::IdentTarget(id),
+                    Expr::AttrExpr(expr, id) => Target::AttrTarget(expr, id),
+                    Expr::SubscrExpr(expr1, expr2) => Target::SubscrTarget(expr1, expr2),
+                    _ => panic!("Parse Error: Assign Target")
+                };
+                self.consume(Token::In);
+                let expr = self.expr();
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog = self.block();
+                CompoundStmt::ForStmt(target, expr, prog)
+            },
+            Some(&Token::Try) => {
+                self.consume(Token::Try);
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog_try = self.block();
+                self.consume(Token::Except);
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog_except = self.block();
+                CompoundStmt::TryStmt(prog_try, prog_except)
+            },
+            Some(&Token::Def) => {
+                self.consume(Token::Def);
+                let fun_name = self.consume_ident();
+                self.consume(Token::LParen);
+                let parm_list = self.parm_list();
+                self.consume(Token::RParen);
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog = self.block();
+                CompoundStmt::DefStmt(fun_name, parm_list, prog)
+            },
+            Some(&Token::Class) => {
+                let mut bases = vec![];
+                self.consume(Token::Class);
+                let class_name = self.consume_ident();
+
+                if self.match_token(Token::LParen) {
+                    self.consume(Token::LParen);
+                    bases = self.comma_list();
+                    self.consume(Token::RParen);
+                }
+
+                self.consume(Token::Colon);
+                self.consume(Token::NewLine);
+                let prog = self.block();
+                CompoundStmt::ClassStmt(class_name, bases, prog)
+            },
             _ => panic!("Parse Error: compound_stmt"),
         }
-    }
-
-    fn if_stmt(&mut self) -> CompoundStmt {
-        self.consume(Token::If);
-        let expr = self.expr();
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog_then = self.block();
-        self.consume(Token::Else);
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog_else = self.block();
-        CompoundStmt::IfStmt(expr, prog_then, prog_else)
-    }
-
-    fn while_stmt(&mut self) -> CompoundStmt {
-        self.consume(Token::While);
-        let expr = self.expr();
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog = self.block();
-        CompoundStmt::WhileStmt(expr, prog)
-    }
-
-    fn for_stmt(&mut self) -> CompoundStmt {
-        self.consume(Token::For);
-        let target = match self.expr() {
-            Expr::VarExpr(id) => Target::IdentTarget(id),
-            Expr::AttrExpr(expr, id) => Target::AttrTarget(expr, id),
-            Expr::SubscrExpr(expr1, expr2) => Target::SubscrTarget(expr1, expr2),
-            _ => panic!("Parse Error: Assign Target")
-        };
-        self.consume(Token::In);
-        let expr = self.expr();
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog = self.block();
-        CompoundStmt::ForStmt(target, expr, prog)
-    }
-
-    fn def_stmt(&mut self) -> CompoundStmt {
-        self.consume(Token::Def);
-        let fun_name = self.consume_ident();
-        self.consume(Token::LParen);
-        let parm_list = self.parm_list();
-        self.consume(Token::RParen);
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog = self.block();
-        CompoundStmt::DefStmt(fun_name, parm_list, prog)
-    }
-
-    fn class_stmt(&mut self) -> CompoundStmt {
-        let mut bases = vec![];
-        self.consume(Token::Class);
-        let class_name = self.consume_ident();
-
-        if self.match_token(Token::LParen) {
-            self.consume(Token::LParen);
-            bases = self.comma_list();
-            self.consume(Token::RParen);
-        }
-
-        self.consume(Token::Colon);
-        self.consume(Token::NewLine);
-        let prog = self.block();
-        CompoundStmt::ClassStmt(class_name, bases, prog)
     }
 
     fn parm_list(&mut self) -> Vec<Id> {

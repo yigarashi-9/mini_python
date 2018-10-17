@@ -1,6 +1,7 @@
 pub mod boolobj;
 pub mod codeobj;
 pub mod dictobj;
+pub mod excobj;
 pub mod funobj;
 pub mod generic;
 pub mod listobj;

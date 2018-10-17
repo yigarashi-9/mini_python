@@ -51,8 +51,9 @@ pub enum SimpleStmt {
     AssignStmt(Target, Expr),
     BreakStmt,
     ContinueStmt,
+    RaiseStmt(Expr),
     ReturnStmt(Expr),
-    AssertStmt(Expr)
+    AssertStmt(Expr),
 }
 
 #[derive(Clone)]
@@ -60,6 +61,7 @@ pub enum CompoundStmt {
     IfStmt(Expr, Program, Program),
     WhileStmt(Expr, Program),
     ForStmt(Target, Expr, Program),
+    TryStmt(Program, Program),
     DefStmt(Id, Vec<Id>, Program),
     ClassStmt(Id, Vec<Expr>, Program)
 }
