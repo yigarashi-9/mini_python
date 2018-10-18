@@ -295,30 +295,15 @@ impl StackMachine {
                 &Opcode::MakeClass(nbases) => {
                     let nameobj = self.pop();
                     let codeobj = self.pop();
-                    let bases = self.pop_as_vec(nbases);
+                    let bases = PyObject::pylist_from_vec(&self.pop_as_vec(nbases));
 
                     let new_env = Rc::new(Env::new_child(&env, &vec![], &vec![]));
                     eval(&codeobj.pycode_code(), Rc::clone(&new_env));
                     let dictobj = new_env.dictobj();
-                    let cls = PyObject::pytype_new();
 
-                    {
-                        let mut typ = cls.pytype_typeobj_borrow_mut();
-                        typ.tp_dict = Some(Rc::clone(&dictobj));
-                        typ.tp_name = pyobj_to_string(nameobj);
-                        typ.tp_bases = Some(PyObject::pylist_from_vec(&bases));
-                    }
+                    let meta = PY_TYPE_TYPE.with(|tp| Rc::clone(tp));
+                    let cls = meta.pytype_tp_call().unwrap()(Rc::clone(&meta), &vec![nameobj, bases, dictobj]);
 
-                    for base in &bases {
-                        let mut typ = base.pytype_typeobj_borrow_mut();
-                        if typ.tp_subclasses.is_none() {
-                            typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
-                        }
-                        pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()),
-                                      Rc::clone(&cls));
-                    }
-
-                    pytype_ready(Rc::clone(&cls));
                     self.push(cls);
                     self.pc += 1;
                     continue;

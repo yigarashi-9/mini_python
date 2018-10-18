@@ -27,6 +27,7 @@ use self::strobj::PyStringObject;
 use self::typeobj::PyTypeObject;
 
 pub enum PyInnerObject {
+    BaseObj,
     CodeObj(Rc<PyCodeObject>),
     DictObj(Rc<PyDictObject>),
     FunObj(Rc<PyFunObject>),
