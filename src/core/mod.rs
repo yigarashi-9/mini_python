@@ -11,4 +11,4 @@ pub mod object;
 pub mod eval;
 pub mod error;
 pub mod builtinmodule;
-pub mod util;
+pub mod utils;

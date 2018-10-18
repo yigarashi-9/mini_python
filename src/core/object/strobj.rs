@@ -52,23 +52,11 @@ thread_local! (
     pub static PY_STRING_TYPE: Rc<PyObject> = {
         let strtp = PyTypeObject {
             tp_name: "str".to_string(),
-            tp_base: None,
             tp_hash: Some(Rc::new(str_hash)),
-            tp_bool: None,
             tp_fun_eq: Some(Rc::new(eq_str_str)),
             tp_fun_add: Some(Rc::new(add_str_str)),
-            tp_fun_lt: None,
             tp_len: Some(Rc::new(str_len)),
-            tp_call: None,
-            tp_getattro: None,
-            tp_setattro: None,
-            tp_iter: None,
-            tp_iternext: None,
-            tp_methods: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),

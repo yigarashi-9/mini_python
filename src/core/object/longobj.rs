@@ -63,23 +63,12 @@ thread_local! (
     pub static PY_LONG_TYPE: Rc<PyObject> = {
         let longtp = PyTypeObject {
             tp_name: "int".to_string(),
-            tp_base: None,
             tp_hash: Some(Rc::new(long_hash)),
             tp_bool: Some(Rc::new(long_bool)),
             tp_fun_eq: Some(Rc::new(eq_long_long)),
             tp_fun_add: Some(Rc::new(add_long_long)),
             tp_fun_lt: Some(Rc::new(lt_long_long)),
-            tp_len: None,
-            tp_call: None,
-            tp_getattro: None,
-            tp_setattro: None,
-            tp_iter: None,
-            tp_iternext: None,
-            tp_methods: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),

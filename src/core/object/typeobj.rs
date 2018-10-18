@@ -16,6 +16,7 @@ pub type SetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>, Rc<PyObject>) -> ();
 pub type GetIterFun = dyn Fn(Rc<PyObject>) -> Rc<PyObject>;
 pub type IterNextFun = dyn Fn(Rc<PyObject>) -> Option<Rc<PyObject>>;
 
+#[derive(Default)]
 pub struct PyTypeObject {
     pub tp_name: String,
     pub tp_base: Option<Rc<PyObject>>,
@@ -41,23 +42,12 @@ thread_local! (
     pub static PY_TYPE_TYPE: Rc<PyObject> = {
         let tp = PyTypeObject {
             tp_name: "type".to_string(),
-            tp_base: None,
             tp_hash: Some(Rc::new(default_hash)),
-            tp_bool: None,
             tp_fun_eq: Some(Rc::new(type_eq)),
-            tp_fun_add: None,
-            tp_fun_lt: None,
-            tp_len: None,
             tp_call: Some(Rc::new(type_call)),
             tp_getattro: Some(Rc::new(type_getattro)),
             tp_setattro: Some(Rc::new(type_setattro)),
-            tp_iter: None,
-            tp_iternext: None,
-            tp_methods: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: None,

@@ -1,7 +1,7 @@
 extern crate core;
 
 use core::error::pyerr_occurred;
-use core::util::*;
+use core::utils::*;
 
 macro_rules! test_cases {
     ( $( $i:ident ), * ) => {

@@ -17,23 +17,9 @@ thread_local! (
     pub static PY_DICT_TYPE: Rc<PyObject> = {
         let dicttp = PyTypeObject {
             tp_name: "dict".to_string(),
-            tp_base: None,
-            tp_hash: None,
-            tp_bool: None,
-            tp_fun_eq: None,
-            tp_fun_add: None,
-            tp_fun_lt: None,
             tp_len: Some(Rc::new(dict_len)),
-            tp_call: None,
             tp_getattro: Some(Rc::new(pyobj_get_attro)),
-            tp_setattro: None,
-            tp_iter: None,
-            tp_iternext: None,
-            tp_methods: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),

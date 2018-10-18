@@ -34,23 +34,11 @@ thread_local! (
         }));
         let listtp = PyTypeObject {
             tp_name: "list".to_string(),
-            tp_base: None,
-            tp_hash: None,
             tp_bool: Some(Rc::new(list_bool)),
-            tp_fun_eq: None,
-            tp_fun_add: None,
-            tp_fun_lt: None,
             tp_len: Some(Rc::new(list_len)),
-            tp_call: None,
-            tp_getattro: None,
-            tp_setattro: None,
             tp_iter: Some(Rc::new(list_iter)),
-            tp_iternext: None,
             tp_methods: Some(tp_methods),
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),
@@ -133,23 +121,8 @@ thread_local! (
     pub static PY_LISTITER_TYPE: Rc<PyObject> = {
         let itertp = PyTypeObject {
             tp_name: "listiter".to_string(),
-            tp_base: None,
-            tp_hash: None,
-            tp_bool: None,
-            tp_fun_eq: None,
-            tp_fun_add: None,
-            tp_fun_lt: None,
-            tp_len: None,
-            tp_call: None,
-            tp_getattro: None,
-            tp_setattro: None,
-            tp_iter: None,
             tp_iternext: Some(Rc::new(listiter_next)),
-            tp_methods: None,
-            tp_dict: None,
-            tp_bases: None,
-            tp_mro: None,
-            tp_subclasses: None,
+            ..Default::default()
         };
         Rc::new(PyObject {
             ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(tp)) }),

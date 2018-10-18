@@ -11,22 +11,7 @@ thread_local! (
             PyTypeObject {
                 tp_name: "bool".to_string(),
                 tp_base: Some(Rc::clone(longtp)),
-                tp_hash: None,
-                tp_bool: None,
-                tp_fun_eq: None,
-                tp_fun_add: None,
-                tp_fun_lt: None,
-                tp_len: None,
-                tp_call: None,
-                tp_getattro: None,
-                tp_setattro: None,
-                tp_iter: None,
-                tp_iternext: None,
-                tp_methods: None,
-                tp_dict: None,
-                tp_bases: None,
-                tp_mro: None,
-                tp_subclasses: None,
+                ..Default::default()
             }
         });
         Rc::new(PyObject {

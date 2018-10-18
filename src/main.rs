@@ -1,5 +1,5 @@
 extern crate core;
 
 fn main() {
-    core::util::run("test.py");
+    core::utils::run("test.py");
 }
