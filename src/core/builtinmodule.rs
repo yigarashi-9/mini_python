@@ -41,9 +41,11 @@ pub fn load_builtins(env: Rc<Env>) {
     env.update("int".to_string(), PY_LONG_TYPE.with(|tp| { Rc::clone(tp) }));
     env.update("bool".to_string(), PY_BOOL_TYPE.with(|tp| { Rc::clone(tp) }));
     env.update("Exception".to_string(), PY_EXC_TYPE.with(|tp| { Rc::clone(tp) }));
+    env.update("TypeError".to_string(), PY_TYPEERROR_TYPE.with(|tp| { Rc::clone(tp) }));
     PY_BASEOBJ_TYPE.with(|tp| { pytype_ready(Rc::clone(tp)) });
     PY_BOOL_TYPE.with(|booltp| { pytype_ready(Rc::clone(booltp)) });
     PY_LIST_TYPE.with(|listtp| { pytype_ready(Rc::clone(listtp)) });
     PY_BASEEXC_TYPE.with(|exctp| { pytype_ready(Rc::clone(exctp)) });
     PY_EXC_TYPE.with(|exctp| { pytype_ready(Rc::clone(exctp)) });
+    PY_TYPEERROR_TYPE.with(|exctp| { pytype_ready(Rc::clone(exctp)) });
 }

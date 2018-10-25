@@ -40,5 +40,5 @@ test_cases![
     bool_arith,
     type_call,
     for_stmt,
-    try_catch_basic, try_catch_loop, try_catch_fun
+    try_catch_basic, try_catch_loop, try_catch_fun, catch_type_error
 ];

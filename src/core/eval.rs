@@ -5,6 +5,7 @@ use env::*;
 use error::*;
 
 use object::*;
+use object::excobj::*;
 use object::generic::*;
 use object::listobj::*;
 use object::typeobj::*;
@@ -103,10 +104,19 @@ impl StackMachine {
                     let left = self.pop();
                     let ob_type = left.ob_type();
                     let typ = ob_type.pytype_typeobj_borrow();
-                    let res = (typ.tp_fun_add.as_ref().expect("Add"))(left, right);
-                    self.push(res);
-                    self.pc += 1;
-                    continue;
+                    match typ.tp_fun_add {
+                        Some(ref fun) => {
+                            let res = fun(left, right);
+                            self.push(res);
+                            self.pc += 1;
+                            continue;
+                        },
+                        None => {
+                            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                             "Type Error: BinaryAdd");
+                            why = Why::WhyException;
+                        }
+                    }
                 },
                 &Opcode::BinaryLt => {
                     let right = self.pop();
@@ -260,9 +270,15 @@ impl StackMachine {
                             continue;
                         },
                         None => {
-                            self.pop();
-                            self.pc = addr;
-                            continue;
+                            if pyerr_check(PY_STOPITERATION_TYPE.with(|tp| Rc::clone(tp))) {
+                                pyerr_clear();
+                            }
+
+                            if !pyerr_occurred(){
+                                self.pop();
+                                self.pc = addr;
+                                continue;
+                            }
                         }
                     }
                 },

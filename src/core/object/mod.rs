@@ -18,6 +18,7 @@ use std::rc::Rc;
 
 use self::codeobj::PyCodeObject;
 use self::dictobj::PyDictObject;
+use self::excobj::PyExcObject;
 use self::funobj::PyFunObject;
 use self::listobj::{PyListObject, PyListIterObject};
 use self::longobj::PyLongObject;
@@ -30,6 +31,7 @@ pub enum PyInnerObject {
     BaseObj,
     CodeObj(Rc<PyCodeObject>),
     DictObj(Rc<PyDictObject>),
+    ExcObj(Rc<PyExcObject>),
     FunObj(Rc<PyFunObject>),
     InstObj,
     ListObj(Rc<PyListObject>),
