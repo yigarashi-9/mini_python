@@ -27,15 +27,15 @@ pub fn pyerr_set(err: Rc<PyObject>) {
 
 pub fn pyerr_set_string(exception: Rc<PyObject>, s: &str) {
     if !PyObject::pyexc_is_exc_subclass(Rc::clone(&exception)) {
-        panic!("Type Error: pyerr_set_string");
+        panic!("Implementation Error: pyerr_set_string");
     }
 
-    if let Some(err) = call_func(exception, &vec![PyObject::from_str(s)]) {
-        pyerr_set(err);
-    } else {
-        panic!("System Error: pyerr_set_string");
+    match call_func(exception, &vec![PyObject::from_str(s)]) {
+        Ok(err) => {
+            pyerr_set(err);
+        },
+        Err(_) => {} // エラーを入れ子にする仕組みが必要
     }
-
 }
 
 pub fn pyerr_clear() {

@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
 use env::*;
+use error::*;
+use eval::PyRes;
 
 use object::*;
 use object::boolobj::*;
@@ -10,12 +12,16 @@ use object::longobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
-fn builtin_len(_module: Rc<PyObject>, obj: Rc<PyObject>) -> Rc<PyObject> {
+fn builtin_len(_module: Rc<PyObject>, obj: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
     let ob_type = obj.ob_type();
     let typ = ob_type.pytype_typeobj_borrow();
     match typ.tp_len {
         Some(ref fun) => (*fun)(Rc::clone(&obj)),
-        None => panic!("Type Error: builtin_len"),
+        None => {
+            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                             "no __lt__ operation");
+            Err(())
+        }
     }
 }
 

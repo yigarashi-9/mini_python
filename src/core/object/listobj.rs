@@ -1,24 +1,14 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use error::*;
+use eval::PyRes;
 use object::{PyObject, PyInnerObject};
+use object::excobj::*;
 use object::noneobj::*;
 use object::rustfunobj::*;
 use object::typeobj::{PyTypeObject, PY_TYPE_TYPE};
 
-fn list_len(v: Rc<PyObject>) -> Rc<PyObject> {
-    match v.inner {
-        PyInnerObject::ListObj(ref obj) => PyObject::from_i32(obj.list.borrow().len() as i32),
-        _ => panic!("TypeError: list_len")
-    }
-}
-
-fn list_bool(v: Rc<PyObject>) -> Rc<PyObject> {
-    match v.inner {
-        PyInnerObject::ListObj(ref obj) => PyObject::from_bool(!(obj.list.borrow().is_empty())),
-        _ => panic!("TypeError: list_bool")
-    }
-}
 
 thread_local! (
     pub static PY_LIST_TYPE: Rc<PyObject> = {
@@ -29,14 +19,14 @@ thread_local! (
             inner: PyInnerObject::RustFunObj(Rc::new(PyRustFunObject {
                 name: "append".to_string(),
                 ob_self: None,
-                rust_fun: PyRustFun::MethO(Rc::new(pylist_append)),
+                rust_fun: PyRustFun::MethO(Rc::new(PyObject::pylist_append)),
             })),
         }));
         let listtp = PyTypeObject {
             tp_name: "list".to_string(),
-            tp_bool: Some(Rc::new(list_bool)),
-            tp_len: Some(Rc::new(list_len)),
-            tp_iter: Some(Rc::new(list_iter)),
+            tp_bool: Some(Rc::new(PyObject::pylist_bool)),
+            tp_len: Some(Rc::new(PyObject::pylist_len)),
+            tp_iter: Some(Rc::new(PyObject::pylist_iter)),
             tp_methods: Some(tp_methods),
             ..Default::default()
         };
@@ -70,15 +60,53 @@ impl PyObject {
         PY_LIST_TYPE.with(|tp| { (&self.ob_type).as_ref() == Some(tp) })
     }
 
-    pub fn pylist_getitem(&self, index: usize) -> Rc<PyObject> {
+    fn pylist_len(self: Rc<Self>) -> PyRes<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => Ok(PyObject::from_i32(obj.list.borrow().len() as i32)),
+            _ => {
+                pyerr_set_string(
+                    PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                    "len expects list object"
+                );
+                Err(())
+            }
+        }
+    }
+
+    fn pylist_bool(self: Rc<Self>) -> PyRes<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => Ok(PyObject::from_bool(!(obj.list.borrow().is_empty()))),
+            _ => {
+                pyerr_set_string(
+                    PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                    "len expects list object"
+                );
+                Err(())
+            }
+        }
+    }
+
+    pub fn pylist_getitem(&self, index: usize) -> PyRes<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::ListObj(ref obj) => {
                 match obj.list.borrow().get(index) {
-                    Some(item) => Rc::clone(item),
-                    None => panic!("Out of range Error: pylist_getitem")
+                    Some(item) => Ok(Rc::clone(item)),
+                    None => {
+                        pyerr_set_string(
+                            PY_INDEXERROR_TYPE.with(|tp| Rc::clone(tp)),
+                            "len expects list object"
+                        );
+                        Err(())
+                    }
                 }
             },
-            _ => panic!("Type Error: pylist_getitem")
+            _ => {
+                pyerr_set_string(
+                    PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                    "__getitem__ expects list object"
+                );
+                Err(())
+            }
         }
     }
 
@@ -100,15 +128,40 @@ impl PyObject {
         }
     }
 
-}
+    pub fn pylist_append(self: Rc<Self>, elm: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
+        match self.inner {
+            PyInnerObject::ListObj(ref obj) => {
+                obj.list.borrow_mut().push(Rc::clone(&elm));
+                Ok(PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) }))
+            },
+            _ => {
+                pyerr_set_string(
+                    PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                    "append expects list object"
+                );
+                Err(())
+            }
+        }
+    }
 
-pub fn pylist_append(slf: Rc<PyObject>, elm: Rc<PyObject>) -> Rc<PyObject> {
-    match slf.inner {
-        PyInnerObject::ListObj(ref obj) => {
-            obj.list.borrow_mut().push(Rc::clone(&elm));
-            PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
-        },
-        _ => panic!("Type Error: pylist_append")
+    pub fn pylist_iter(self: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
+        if !self.pylist_check() {
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "__iter__ expects list object"
+            );
+            return Err(())
+        };
+        Ok(Rc::new(PyObject {
+            ob_type: PY_LISTITER_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            ob_dict: None,
+            inner: PyInnerObject::ListIterObj(Rc::new(RefCell::new(
+                PyListIterObject {
+                    it_index: 0,
+                    it_seq: self,
+                }
+            )))
+        }))
     }
 }
 
@@ -121,7 +174,7 @@ thread_local! (
     pub static PY_LISTITER_TYPE: Rc<PyObject> = {
         let itertp = PyTypeObject {
             tp_name: "listiter".to_string(),
-            tp_iternext: Some(Rc::new(listiter_next)),
+            tp_iternext: Some(Rc::new(PyObject::pylistiter_next)),
             ..Default::default()
         };
         Rc::new(PyObject {
@@ -136,35 +189,26 @@ impl PyObject {
     pub fn pylistiter_check(&self) -> bool {
         PY_LISTITER_TYPE.with(|tp| { (&self.ob_type).as_ref() == Some(tp) })
     }
-}
 
-pub fn list_iter(slf: Rc<PyObject>) -> Rc<PyObject> {
-    if !slf.pylist_check() { panic!("Type Error: pylist_iter") };
-    Rc::new(PyObject {
-        ob_type: PY_LISTITER_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
-        ob_dict: None,
-        inner: PyInnerObject::ListIterObj(Rc::new(RefCell::new(
-            PyListIterObject {
-                it_index: 0,
-                it_seq: slf,
+    pub fn pylistiter_next(self: Rc<PyObject>) -> PyRes<Option<Rc<PyObject>>> {
+        match self.inner {
+            PyInnerObject::ListIterObj(ref it) => {
+                let mut it = it.borrow_mut();
+                if it.it_index >= it.it_seq.pylist_size() {
+                    Ok(None)
+                } else {
+                    let res = it.it_seq.pylist_getitem(it.it_index).unwrap();
+                    it.it_index += 1;
+                    Ok(Some(res))
+                }
+            },
+            _ => {
+                pyerr_set_string(
+                    PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                    "__next__ expects listiter object"
+                );
+                Err(())
             }
-        )))
-    })
-}
-
-pub fn listiter_next(slf: Rc<PyObject>) -> Option<Rc<PyObject>> {
-    if !slf.pylistiter_check() { panic!("Type Error: listiter_next") };
-    match slf.inner {
-        PyInnerObject::ListIterObj(ref it) => {
-            let mut it = it.borrow_mut();
-            if it.it_index >= it.it_seq.pylist_size() {
-                None
-            } else {
-                let res = it.it_seq.pylist_getitem(it.it_index);
-                it.it_index += 1;
-                Some(res)
-            }
-        },
-        _ => panic!("Type Error: listiter_next"),
+        }
     }
 }

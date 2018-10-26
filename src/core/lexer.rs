@@ -204,7 +204,7 @@ pub fn tokenize(s: String) -> Result<Vec<Token>, LexingError> {
                 lexer.next();
                 let s: String = lexer.consume_while(is_not_dquote).into_iter().collect();
                 lexer.tokens.push(Token::Str(s));
-                try!(lexer.consume('"').ok_or(lexer.error("\" expected".to_string())));
+                lexer.consume('"').ok_or(lexer.error("\" expected".to_string()))?;
             },
             '+' | '<' | '(' | ')' | '[' | ']' | '{' | '}' | ':' | ',' | '.' => {
                 let nch = lexer.next().unwrap();

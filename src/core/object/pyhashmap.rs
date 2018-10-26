@@ -11,10 +11,9 @@ impl PyHashMap {
         PyHashMap { table: vec![] }
     }
 
-    pub fn get(&self, key: Rc<PyObject>) -> Option<&Rc<PyObject>> {
-        self.table.iter().find_map(|ref tuple| {
-            let ob_type = key.ob_type();
-            if tuple.0 == ob_type.pytype_typeobj_borrow().tp_hash.as_ref().unwrap()(Rc::clone(&key)) {
+    pub fn get(&self, hash: u64) -> Option<&Rc<PyObject>> {
+        self.table.iter().find_map(|tuple| {
+            if tuple.0 == hash {
                 Some(&tuple.2)
             } else {
                 None
@@ -22,9 +21,7 @@ impl PyHashMap {
         })
     }
 
-    pub fn insert(&mut self, key: Rc<PyObject>, value: Rc<PyObject>) {
-        let ob_type = key.ob_type();
-        let hash = ob_type.pytype_typeobj_borrow().tp_hash.as_ref().unwrap()(Rc::clone(&key));
+    pub fn insert(&mut self, hash: u64, key: Rc<PyObject>, value: Rc<PyObject>) {
         let new_entry = [(hash, Rc::clone(&key), Rc::clone(&value))];
         let i = self.table.iter().position(|ref tuple| tuple.0 == hash);
         match i {

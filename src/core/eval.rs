@@ -7,8 +7,9 @@ use error::*;
 use object::*;
 use object::excobj::*;
 use object::generic::*;
-use object::listobj::*;
 use object::typeobj::*;
+
+pub type PyRes<T> = Result<T, ()>;
 
 #[derive(PartialEq)]
 enum Why {
@@ -72,8 +73,8 @@ impl StackMachine {
         }
     }
 
-    fn exec(&mut self, code: &Code, env: Rc<Env>) -> Option<Rc<PyObject>> {
-        let mut retval = None;
+    fn exec(&mut self, code: &Code, env: Rc<Env>) -> PyRes<Rc<PyObject>> {
+        let mut retval = Err(());
         let mut why = Why::WhyNot;
 
         while let Some(op) = code.get(self.pc) {
@@ -107,36 +108,63 @@ impl StackMachine {
                     match typ.tp_fun_add {
                         Some(ref fun) => {
                             let res = fun(left, right);
-                            self.push(res);
-                            self.pc += 1;
-                            continue;
+                            if res.is_ok() {
+                                self.push(res.expect("Never fails"));
+                                self.pc += 1;
+                                continue;
+                            }
                         },
                         None => {
                             pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
-                                             "Type Error: BinaryAdd");
-                            why = Why::WhyException;
+                                             "no __add__ operation");
                         }
                     }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::BinaryLt => {
                     let right = self.pop();
                     let left = self.pop();
                     let ob_type = left.ob_type();
                     let typ = ob_type.pytype_typeobj_borrow();
-                    let res = (typ.tp_fun_lt.as_ref().expect("Lt"))(left, right);
-                    self.push(res);
-                    self.pc += 1;
-                    continue;
+                    match typ.tp_fun_lt {
+                        Some(ref fun) => {
+                            let res = fun(left, right);
+                            if res.is_ok() {
+                                self.push(res.expect("Never fails"));
+                                self.pc += 1;
+                                continue;
+                            }
+                        },
+                        None => {
+                            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                             "no __lt__ operation");
+                        }
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::BinaryEq => {
                     let right = self.pop();
                     let left = self.pop();
                     let ob_type = left.ob_type();
                     let typ = ob_type.pytype_typeobj_borrow();
-                    let res = (typ.tp_fun_eq.as_ref().expect("Eq"))(left, right);
-                    self.push(res);
-                    self.pc += 1;
-                    continue;
+                    match typ.tp_fun_eq {
+                        Some(ref fun) => {
+                            let res = fun(left, right);
+                            if res.is_ok() {
+                                self.push(res.expect("Never fails"));
+                                self.pc += 1;
+                                continue;
+                            }
+                        },
+                        None => {
+                            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                             "no __eq__ operation");
+                        }
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::MakeFunction => {
                     self.pop();  // qualname
@@ -148,55 +176,94 @@ impl StackMachine {
                 &Opcode::CallFunction(argcnt) => {
                     let args = self.pop_as_vec(argcnt);
                     let fun = self.pop();
-
-                    if let Some(res) = call_func(fun, &args) {
-                        self.push(res);
+                    let res = call_func(fun, &args);
+                    if res.is_ok() {
+                        self.push(res.expect("Never fails"));
                         self.pc += 1;
                         continue;
-                    } else {
-                        retval = None;
                     }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::ReturnValue => {
-                    retval = Some(self.pop());
+                    retval = Ok(self.pop());
                     why = Why::WhyReturn;
                 },
                 &Opcode::LoadAttr(ref id) => {
                     let v = self.pop();
                     let attr = PyObject::from_string(id.clone());
-                    let res = pyobj_get_attro(v, attr).expect("LoadAttr");
-                    self.push(res);
-                    self.pc += 1;
-                    continue;
+                    let res = pyobj_get_attr(v, attr);
+                    if res.is_ok() {
+                        self.push(res.expect("Never fails"));
+                        self.pc += 1;
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::StoreAttr(ref id) => {
                     let lv = self.pop();
                     let rv = self.pop();
                     let attr = PyObject::from_string(id.clone());
-                    pyobj_set_attro(lv, attr, rv);
-                    self.pc += 1;
-                    continue;
+                    let res = pyobj_set_attr(lv, attr, rv);
+                    if res.is_ok() {
+                        self.pc += 1;
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::BinarySubScr => {
                     let v2 = self.pop();
                     let v1 = self.pop();
+
                     if v1.pylist_check() {
-                        self.push(v1.pylist_getitem(pyobj_to_i32(v2) as usize))
+                        let index = pyobj_to_i32(v2);
+                        if index.is_ok() {
+                            let res = v1.pylist_getitem(index.expect("Never fails") as usize);
+                            if res.is_ok() {
+                                self.push(res.expect("Never fails"));
+                                self.pc += 1;
+                                continue;
+                            }
+                        }
                     } else if v1.pydict_check() {
-                        self.push(v1.pydict_lookup(v2).expect("BinarySubscr"))
+                        let res = v1.pydict_lookup(v2);
+                        if res.is_ok() {
+                            match res.expect("Never fails") {
+                                Some(res) => {
+                                    self.push(res);
+                                    self.pc += 1;
+                                    continue;
+                                },
+                                None => {
+                                    pyerr_set_string(
+                                        PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                        "item not found");
+                                }
+                            }
+                        }
                     } else {
-                        panic!("BinarySubScr")
+                        pyerr_set_string(
+                            PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                            "subscripting not supported");
                     };
-                    self.pc += 1;
-                    continue;
+
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::StoreSubScr => {
                     let v2 = self.pop();
                     let v1 = self.pop();
                     let rv = self.pop();
-                    v1.pydict_update(v2, rv);
-                    self.pc += 1;
-                    continue;
+                    let res = v1.pydict_update(v2, rv);
+
+                    if res.is_ok() {
+                        self.pc += 1;
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::BuildList(len) => {
                     let vs = self.pop_as_vec(len);
@@ -216,21 +283,31 @@ impl StackMachine {
                 },
                 &Opcode::PopJumpIfTrue(addr) => {
                     let cond = self.pop();
-                    if pyobj_to_bool(cond) {
-                        self.pc = addr;
-                    } else {
-                        self.pc += 1;
-                    };
-                    continue;
+                    let b = pyobj_to_bool(cond);
+                    if b.is_ok() {
+                        if b.expect("Never fails") {
+                            self.pc = addr;
+                        } else {
+                            self.pc += 1;
+                        };
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::PopJumpIfFalse(addr) => {
                     let cond = self.pop();
-                    if pyobj_to_bool(cond) {
-                        self.pc += 1;
-                    } else {
-                        self.pc = addr;
-                    };
-                    continue;
+                    let b = pyobj_to_bool(cond);
+                    if b.is_ok() {
+                        if b.expect("Never fails") {
+                            self.pc += 1;
+                        } else {
+                            self.pc = addr;
+                        };
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::JumpAbsolute(addr) => {
                     self.pc = addr;
@@ -249,37 +326,57 @@ impl StackMachine {
                     why = Why::WhyBreak;
                 },
                 &Opcode::ContinueLoop(addr) => {
-                    retval = Some(PyObject::from_i32(addr as i32));
+                    retval = Ok(PyObject::from_i32(addr as i32));
                     why = Why::WhyContinue;
 
                 },
                 &Opcode::GetIter => {
                     let v = self.pop();
-                    let iterfun = v.ob_type().pytype_tp_iter().expect("GetIter");
-                    self.push(iterfun(Rc::clone(&v)));
-                    self.pc += 1;
-                    continue;
+                    match v.ob_type().pytype_tp_iter() {
+                        Some(ref iterfun) => {
+                            let iter = iterfun(Rc::clone(&v));
+                            if iter.is_ok() {
+                                self.push(iter.expect("Never fails"));
+                                self.pc += 1;
+                                continue;
+                            }
+                        },
+                        None => {
+                            pyerr_set_string(
+                                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                "__iter__ is not found");
+                        }
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::ForIter(addr) => {
                     let it = self.top();
-                    let nextfun = it.ob_type().pytype_tp_iternext().expect("ForIter");
-                    match nextfun(Rc::clone(&it)) {
-                        Some(next) => {
-                            self.push(next);
-                            self.pc += 1;
-                            continue;
-                        },
-                        None => {
-                            if pyerr_check(PY_STOPITERATION_TYPE.with(|tp| Rc::clone(tp))) {
-                                pyerr_clear();
-                            }
-
-                            if !pyerr_occurred(){
-                                self.pop();
-                                self.pc = addr;
+                    let nextfun = it.ob_type().pytype_tp_iternext().expect("Never fails");
+                    let next = nextfun(Rc::clone(&it));
+                    if next.is_ok() {
+                        match next.expect("Never fails") {
+                            Some(next) => {
+                                self.push(next);
+                                self.pc += 1;
                                 continue;
+                            },
+                            None => {
+                                if pyerr_check(PY_STOPITERATION_TYPE.with(|tp| Rc::clone(tp))) {
+                                    pyerr_clear();
+                                } else if !pyerr_occurred() {
+                                    self.pop();
+                                    self.pc = addr;
+                                    continue;
+                                } else {
+                                    why = Why::WhyException;
+                                    retval = Err(());
+                                }
                             }
                         }
+                    } else {
+                        why = Why::WhyException;
+                        retval = Err(());
                     }
                 },
                 &Opcode::SetupExcept(offset) => {
@@ -295,12 +392,20 @@ impl StackMachine {
                     let mut exc = self.pop();
 
                     if PyObject::pyexc_is_exc_subclass(Rc::clone(&exc)) {
-                        exc = type_call(exc, &vec![]);
-                    } else if !PyObject::pyexc_is_exc_instance(Rc::clone(&exc)) {
-                        panic!("Type Error: Raise")
+                        let res = type_call(exc, &vec![]);
+                        if res.is_ok() {
+                            exc = res.expect("Never fails");
+                            pyerr_set(exc);
+                        }
+                    } else if PyObject::pyexc_is_exc_instance(Rc::clone(&exc)) {
+                        pyerr_set(exc);
+                    } else {
+                        pyerr_set_string(
+                            PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                            "raise expects exception type or exception instance");
                     }
-                    pyerr_set(exc);
                     why = Why::WhyException;
+                    retval = Err(());
                 },
                 &Opcode::PopBlock => {
                     let block = self.blocks.pop().unwrap();
@@ -320,14 +425,14 @@ impl StackMachine {
                     let meta = PY_TYPE_TYPE.with(|tp| Rc::clone(tp));
                     let cls = meta.pytype_tp_call().unwrap()(Rc::clone(&meta), &vec![nameobj, bases, dictobj]);
 
-                    self.push(cls);
-                    self.pc += 1;
-                    continue;
+                    if cls.is_ok() {
+                        self.push(cls.expect("Never fails"));
+                        self.pc += 1;
+                        continue;
+                    }
+                    why = Why::WhyException;
+                    retval = Err(());
                 },
-            }
-
-            if why == Why::WhyNot {
-                why = Why::WhyException;
             }
 
             while self.blocks.len() > 0 {
@@ -338,7 +443,7 @@ impl StackMachine {
                     if block.b_type == BlockType::LoopBlock && why == Why::WhyContinue {
                         why = Why::WhyNot;
                         let ret = Rc::clone(retval.as_ref().expect("Continue ret addr"));
-                        self.pc = pyobj_to_i32(ret) as usize;
+                        self.pc = pyobj_to_i32(ret).expect("Never fails") as usize;
                         break;
                     }
                 }
@@ -371,7 +476,7 @@ impl StackMachine {
     }
 }
 
-pub fn eval(code: &Code, env: Rc<Env>) -> Option<Rc<PyObject>> {
+pub fn eval(code: &Code, env: Rc<Env>) -> PyRes<Rc<PyObject>> {
     let mut stack_machine = StackMachine::new();
     stack_machine.exec(code, env)
 }

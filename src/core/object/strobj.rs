@@ -3,48 +3,78 @@ use std::hash::{Hash, Hasher};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use error::*;
+use eval::PyRes;
 use object::{PyObject, PyInnerObject};
+use object::excobj::*;
 use object::typeobj::*;
 
-fn add_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+fn pystr_add(lv: Rc<PyObject>, rv: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
     match lv.inner {
         PyInnerObject::StrObj(ref l_obj) => {
             match rv.inner {
-                PyInnerObject::StrObj(ref r_obj) =>
-                    PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s)),
-                _ => panic!("Type Error: add_str_str"),
+                PyInnerObject::StrObj(ref r_obj) => {
+                    return Ok(PyObject::from_string(format!("{}{}", l_obj.s, r_obj.s)));
+                },
+                _ => {}
             }
         },
-        _ => panic!("Type Error: add_str_str"),
+        _ => {}
     }
+
+    pyerr_set_string(
+        PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+        "__eq__ expects str objects"
+    );
+    Err(())
 }
 
-fn eq_str_str(lv: Rc<PyObject>, rv: Rc<PyObject>) -> Rc<PyObject> {
+fn pystr_eq(lv: Rc<PyObject>, rv: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
     match lv.inner {
         PyInnerObject::StrObj(ref l_obj) => {
             match rv.inner {
-                PyInnerObject::StrObj(ref r_obj) =>
-                    PyObject::from_bool(l_obj.s == r_obj.s),
-                _ => panic!("Type Error: eq_str_str"),
+                PyInnerObject::StrObj(ref r_obj) => {
+                    return Ok(PyObject::from_bool(l_obj.s == r_obj.s));
+                },
+                _ => {}
             }
         },
-        _ => panic!("Type Error: eq_str_str"),
+        _ => {}
     }
+
+    pyerr_set_string(
+        PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+        "__eq__ expects str objects"
+    );
+    Err(())
 }
 
-fn str_hash(obj: Rc<PyObject>) -> u64 {
+
+fn pystr_hash(obj: Rc<PyObject>) -> PyRes<u64> {
     let mut hasher = DefaultHasher::new();
     match obj.inner {
         PyInnerObject::StrObj(ref obj) => obj.s.hash(&mut hasher),
-        _ => panic!("Type Error: str_hash")
+        _ => {
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "__hash__ expects str objects"
+            );
+            return Err(());
+        }
     };
-    hasher.finish()
+    Ok(hasher.finish())
 }
 
-fn str_len(v: Rc<PyObject>) -> Rc<PyObject> {
+fn pystr_len(v: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
     match v.inner {
-        PyInnerObject::StrObj(ref obj) => PyObject::from_i32(obj.s.len() as i32),
-        _ => panic!("Type Error: str_len")
+        PyInnerObject::StrObj(ref obj) => Ok(PyObject::from_i32(obj.s.len() as i32)),
+        _ => {
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "__len__ expects str objects"
+            );
+            return Err(());
+        }
     }
 }
 
@@ -52,10 +82,10 @@ thread_local! (
     pub static PY_STRING_TYPE: Rc<PyObject> = {
         let strtp = PyTypeObject {
             tp_name: "str".to_string(),
-            tp_hash: Some(Rc::new(str_hash)),
-            tp_fun_eq: Some(Rc::new(eq_str_str)),
-            tp_fun_add: Some(Rc::new(add_str_str)),
-            tp_len: Some(Rc::new(str_len)),
+            tp_hash: Some(Rc::new(pystr_hash)),
+            tp_fun_eq: Some(Rc::new(pystr_eq)),
+            tp_fun_add: Some(Rc::new(pystr_add)),
+            tp_len: Some(Rc::new(pystr_len)),
             ..Default::default()
         };
         Rc::new(PyObject {

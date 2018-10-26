@@ -3,19 +3,21 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use error::*;
+use eval::PyRes;
 use syntax::{Id};
 use object::*;
-use object::listobj::*;
+use object::excobj::*;
 use object::generic::*;
 
-pub type HashFun = dyn Fn(Rc<PyObject>) -> u64;
-pub type UnaryOp = dyn Fn(Rc<PyObject>) -> Rc<PyObject>;
-pub type BinaryOp = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>;
-pub type VarArgFun = dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>;
-pub type GetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Option<Rc<PyObject>>;
-pub type SetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>, Rc<PyObject>) -> ();
-pub type GetIterFun = dyn Fn(Rc<PyObject>) -> Rc<PyObject>;
-pub type IterNextFun = dyn Fn(Rc<PyObject>) -> Option<Rc<PyObject>>;
+pub type HashFun = dyn Fn(Rc<PyObject>) -> PyRes<u64>;
+pub type UnaryOp = dyn Fn(Rc<PyObject>) -> PyRes<Rc<PyObject>>;
+pub type BinaryOp = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> PyRes<Rc<PyObject>>;
+pub type VarArgFun = dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>>;
+pub type GetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>) -> PyRes<Option<Rc<PyObject>>>;
+pub type SetAttroFun = dyn Fn(Rc<PyObject>, Rc<PyObject>, Rc<PyObject>) -> PyRes<()>;
+pub type GetIterFun = dyn Fn(Rc<PyObject>) -> PyRes<Rc<PyObject>>;
+pub type IterNextFun = dyn Fn(Rc<PyObject>) -> PyRes<Option<Rc<PyObject>>>;
 
 #[derive(Default)]
 pub struct PyTypeObject {
@@ -61,8 +63,8 @@ thread_local! (
     }
 );
 
-fn type_eq(slf: Rc<PyObject>, other: Rc<PyObject>) -> Rc<PyObject> {
-    PyObject::from_bool(slf == other)
+fn type_eq(slf: Rc<PyObject>, other: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
+    Ok(PyObject::from_bool(slf == other))
 }
 
 impl PartialEq for PyTypeObject {
@@ -90,92 +92,92 @@ impl PyObject {
     pub fn pytype_typeobj_borrow(&self) -> Ref<PyTypeObject> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow(),
-            _ => panic!("Type Error: pytype_inner")
+            _ => panic!("Implementation Error: pytype_typeobj_borrow")
         }
     }
 
     pub fn pytype_typeobj_borrow_mut(&self) -> RefMut<PyTypeObject> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow_mut(),
-            _ => panic!("Type Error: pytype_inner")
+            _ => panic!("Implementation Error: pytype_typeobj_borrow_mut")
         }
     }
 
     pub fn pytype_tp_dict(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_dict.clone(),
-            _ => panic!("Type Error: pytype_tp_dict")
+            _ => panic!("Implementation Error: pytype_tp_dict")
         }
     }
 
     pub fn pytype_tp_iter(&self) -> Option<Rc<GetIterFun>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_iter.clone(),
-            _ => panic!("Type Error: pytype_tp_iter")
+            _ => panic!("Implementation Error: pytype_tp_iter")
         }
     }
 
     pub fn pytype_tp_iternext(&self) -> Option<Rc<IterNextFun>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_iternext.clone(),
-            _ => panic!("Type Error: pytype_tp_iternext")
+            _ => panic!("Implementation Error: pytype_tp_iternext")
         }
     }
 
     pub fn pytype_tp_base(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_base.clone(),
-            _ => panic!("Type Error: pytype_tp_base")
+            _ => panic!("Implementation Error: pytype_tp_base")
         }
     }
 
     pub fn pytype_tp_bases(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_bases.clone(),
-            _ => panic!("Type Error: pytype_tp_bases")
+            _ => panic!("Implementation Error: pytype_tp_bases")
         }
     }
 
     pub fn pytype_tp_mro(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_mro.clone(),
-            _ => panic!("Type Error: pytype_tp_mro")
+            _ => panic!("Implementation Error: pytype_tp_mro")
         }
     }
 
     pub fn pytype_tp_subclasses(&self) -> Option<Rc<PyObject>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_subclasses.clone(),
-            _ => panic!("Type Error: pytype_tp_subclasses")
+            _ => panic!("Implementation Error: pytype_tp_subclasses")
         }
     }
 
     pub fn pytype_tp_call(&self) -> Option<Rc<VarArgFun>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_call.clone(),
-            _ => panic!("Type Error: pytype_tp_init")
+            _ => panic!("Implementation Error: pytype_tp_init")
         }
     }
 
     pub fn pytype_tp_init(&self) -> Option<Rc<VarArgFun>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_init.clone(),
-            _ => panic!("Type Error: pytype_tp_init")
+            _ => panic!("Implementation Error: pytype_tp_init")
         }
     }
 
     pub fn pytype_tp_new(&self) -> Option<Rc<VarArgFun>> {
         match self.inner {
             PyInnerObject::TypeObj(ref typ) => typ.borrow().tp_new.clone(),
-            _ => panic!("Type Error: pytype_tp_new")
+            _ => panic!("Implementation Error: pytype_tp_new")
         }
     }
 }
 
-pub fn default_hash(obj: Rc<PyObject>) -> u64 {
+pub fn default_hash(obj: Rc<PyObject>) -> PyRes<u64> {
     let mut hasher = DefaultHasher::new();
     (&*obj as *const PyObject).hash(&mut hasher);
-    hasher.finish()
+    Ok(hasher.finish())
 }
 
 impl PyTypeObject {
@@ -184,35 +186,43 @@ impl PyTypeObject {
     }
 }
 
-pub fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+pub fn type_call(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>> {
 
     if PY_TYPE_TYPE.with(|tp| { tp == &typ }) {
         if args.len() == 1 {
-            return Rc::clone(&args[0].ob_type())
+            return Ok(Rc::clone(&args[0].ob_type()))
         } else if args.len() != 3 {
-            panic!("Type Error: type_call 1")
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "type expects 1 or 3 arguments"
+            );
+            return Err(())
         }
     }
 
     let tp_new = typ.pytype_tp_new();
+
     if tp_new.is_none() {
-        panic!("Type Error: type_call 2");
+        pyerr_set_string(
+            PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+            "failed to create instance"
+        );
+        return Err(())
     }
 
-    let obj = tp_new.unwrap()(Rc::clone(&typ), args);
+    let obj = tp_new.unwrap()(Rc::clone(&typ), args)?;
 
     if PY_TYPE_TYPE.with(|tp| { tp == &typ }) {
-        return obj;
+        return Ok(obj);
     }
 
-    let ob_type = obj.ob_type();
-    if let Some(tp_init) = ob_type.pytype_tp_init() {
-        tp_init(Rc::clone(&obj), args);
+    if let Some(tp_init) = obj.ob_type().pytype_tp_init() {
+        tp_init(Rc::clone(&obj), args)?;
     }
-    obj
+    Ok(obj)
 }
 
-pub fn type_new(meta: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
+pub fn type_new(meta: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>> {
     let nameobj = Rc::clone(&args[0]);
     let bases = Rc::clone(&args[1]);
     let dictobj = Rc::clone(&args[2]);
@@ -221,60 +231,61 @@ pub fn type_new(meta: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
     {
         let mut typ = cls.pytype_typeobj_borrow_mut();
         typ.tp_dict = Some(Rc::clone(&dictobj));
-        typ.tp_name = pyobj_to_string(nameobj);
+        typ.tp_name = pyobj_to_string(nameobj)?;
         typ.tp_bases = Some(Rc::clone(&bases));
     }
 
     for i in 0..bases.pylist_size() {
-        let base = bases.pylist_getitem(i);
+        let base = bases.pylist_getitem(i)?;
         let mut typ = base.pytype_typeobj_borrow_mut();
         if typ.tp_subclasses.is_none() {
             typ.tp_subclasses = Some(PyObject::pylist_from_vec(&vec![]));
         }
-        pylist_append(Rc::clone(typ.tp_subclasses.as_ref().unwrap()),
-                      Rc::clone(&cls));
+        Rc::clone(typ.tp_subclasses.as_ref().unwrap())
+            .pylist_append(Rc::clone(&cls))?;
     }
 
-    pytype_ready(Rc::clone(&cls));
-    cls
+    pytype_ready(Rc::clone(&cls))?;
+    Ok(cls)
 }
 
-pub fn type_getattro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+pub fn type_getattro(value: Rc<PyObject>, key: Rc<PyObject>) -> PyRes<Option<Rc<PyObject>>> {
     match value.inner {
         PyInnerObject::TypeObj(ref typ) => {
             if let Some(ref mro) = typ.borrow().tp_mro {
-                if !mro.pylist_check() {
-                    panic!("Type Error: type_getattro mro");
-                }
-
                 let mut ret_val = None;
                 for i in 0..(mro.pylist_size()) {
-                    let base = mro.pylist_getitem(i);
+                    let base = mro.pylist_getitem(i).unwrap();
                     if let Some(ref dict) = base.pytype_tp_dict() {
-                        let tmp = dict.pydict_lookup(Rc::clone(&key));
+                        let tmp = dict.pydict_lookup(Rc::clone(&key))?;
                         if tmp.is_some() {
                             ret_val = tmp;
                             break;
                         }
                     }
                 };
-                ret_val
+                Ok(ret_val)
             } else {
-                println!("Error");
                 match value.pytype_tp_dict() {
                     Some(ref tp_dict) => tp_dict.pydict_lookup(Rc::clone(&key)),
-                    None => None,
+                    None => Ok(None),
                 }
             }
         },
-        _ => panic!("Type Error: type_getattro")
+        _ => {
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "__getattribute__ expects type object");
+            return Err(())
+        }
     }
 }
 
-pub fn type_setattro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
-    let tp_dict = value.pytype_tp_dict().expect("No tp_dict");
-    tp_dict.pydict_update(Rc::clone(&key), Rc::clone(&rvalue));
-    update_slot(Rc::clone(&value), pyobj_to_string(Rc::clone(&key)), Rc::clone(&rvalue));
+pub fn type_setattro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) -> PyRes<()> {
+    let tp_dict = value.pytype_tp_dict().expect("Implementation Error: type_setattro");
+    tp_dict.pydict_update(Rc::clone(&key), Rc::clone(&rvalue))?;
+    update_slot(Rc::clone(&value), pyobj_to_string(Rc::clone(&key))?, Rc::clone(&rvalue));
+    Ok(())
 }
 
 fn pick_winner(mro_list: &Vec<Vec<Rc<PyObject>>>) -> Rc<PyObject> {
@@ -321,41 +332,35 @@ fn linearlize(arg: Vec<Vec<Rc<PyObject>>>) -> Vec<Rc<PyObject>> {
     mro
 }
 
-fn unaryop_from_pyobj(obj: Rc<PyObject>) ->
-    Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>> {
-        // TODO: Error handling
-        Rc::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]).expect("unaryop_from_pyobj"))
+fn unaryop_from_pyobj(obj: Rc<PyObject>) -> Rc<UnaryOp> {
+        Rc::new(move |x| call_func(Rc::clone(&obj), &mut vec![x]))
     }
 
-fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) ->
-    Option<Rc<dyn Fn(Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.pydict_lookup(PyObject::from_str(s)).map(unaryop_from_pyobj)
+fn get_wrapped_unaryop(dict: Rc<PyObject>, s: &str) -> PyRes<Option<Rc<UnaryOp>>> {
+        dict.pydict_lookup(PyObject::from_str(s))
+            .map(|opt| opt.map(unaryop_from_pyobj))
     }
 
-fn binop_from_pyobj(obj: Rc<PyObject>) ->
-    Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>> {
-        // TODO: Error handling
-        Rc::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]).expect("binop_from_pyobj"))
+fn binop_from_pyobj(obj: Rc<PyObject>) -> Rc<BinaryOp> {
+        Rc::new(move |x, y| call_func(Rc::clone(&obj), &mut vec![x, y]))
     }
 
-fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) ->
-    Option<Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>> {
-        dict.pydict_lookup(PyObject::from_str(s)).map(binop_from_pyobj)
+fn get_wrapped_binop(dict: Rc<PyObject>, s: &str) -> PyRes<Option<Rc<BinaryOp>>> {
+        dict.pydict_lookup(PyObject::from_str(s))
+            .map(|opt| opt.map(binop_from_pyobj))
     }
 
-fn varargfun_from_pyobj(obj: Rc<PyObject>) ->
-    Rc<dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>> {
-        // TODO: Error handling
+fn varargfun_from_pyobj(obj: Rc<PyObject>) -> Rc<VarArgFun> {
         Rc::new(move |x, vs| {
             let mut args = vec![x];
             for v in vs.iter() { args.push(Rc::clone(v)) };
-            call_func(Rc::clone(&obj), &mut args).expect("varargfun_from_pyobj")
+            call_func(Rc::clone(&obj), &mut args)
         })
     }
 
-fn get_wrapped_varargfun(dict: Rc<PyObject>, s: &str) ->
-    Option<Rc<dyn Fn(Rc<PyObject>, &Vec<Rc<PyObject>>) -> Rc<PyObject>>> {
-        dict.pydict_lookup(PyObject::from_str(s)).map(varargfun_from_pyobj)
+fn get_wrapped_varargfun(dict: Rc<PyObject>, s: &str) -> PyRes<Option<Rc<VarArgFun>>> {
+        dict.pydict_lookup(PyObject::from_str(s))
+            .map(|opt| opt.map(varargfun_from_pyobj))
     }
 
 fn inherit_method(typ: &mut PyTypeObject, base: &PyTypeObject) {
@@ -394,11 +399,12 @@ fn inherit_method(typ: &mut PyTypeObject, base: &PyTypeObject) {
 
 fn update_slot_subclasses(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     if let Some(ref subclasses) = value.pytype_tp_subclasses() {
-        if !subclasses.pylist_check() { panic!("Type Error: updat_slot_subclasses") }
         for i in 0..(subclasses.pylist_size()) {
-            let subclass = subclasses.pylist_getitem(i);
+            let subclass = subclasses.pylist_getitem(i).expect("Never fails");
             let keyval = PyObject::from_string(key.clone());
-            if subclass.pytype_tp_dict().as_ref().unwrap().pydict_lookup(keyval).is_none() {
+            if subclass.pytype_tp_dict().as_ref()
+                .expect("Implementation Error").pydict_lookup(keyval)
+                .expect("Never fails").is_none() {
                 update_slot(Rc::clone(&subclass), key.clone(), Rc::clone(&rvalue));
             }
         }
@@ -427,14 +433,15 @@ pub fn update_slot(value: Rc<PyObject>, key: Id, rvalue: Rc<PyObject>) {
     update_slot_subclasses(Rc::clone(&value), key.clone(), Rc::clone(&rvalue));
 }
 
-pub fn pytype_ready(obj: Rc<PyObject>) {
+pub fn pytype_ready(obj: Rc<PyObject>) -> PyRes<()> {
     if obj.pytype_tp_dict().is_none() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
         let dictobj = PyObject::pydict_new();
 
         if let Some(ref tp_methods) = typ.tp_methods {
             for meth in tp_methods {
-                dictobj.pydict_update(PyObject::from_string(Rc::clone(meth).pyrustfun_name()), Rc::clone(&meth))
+                dictobj.pydict_update(PyObject::from_string(Rc::clone(meth).pyrustfun_name()),
+                                      Rc::clone(&meth))?
             }
         }
         typ.tp_dict = Some(dictobj);
@@ -451,7 +458,7 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
         if let Some(base) = base {
             if let Some(ref bases) = bases_opt {
                 if bases.pylist_size() == 0 {
-                    pylist_append(Rc::clone(bases), base);
+                    Rc::clone(bases).pylist_append(base)?;
                 }
             } else {
                 bases_opt = Some(PyObject::pylist_from_vec(&vec![base]));
@@ -465,9 +472,8 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
     let mut mro: Vec<Rc<PyObject>> = vec![];
     if let Some(ref bases) = obj.pytype_tp_bases() {
         let mut mro_list = vec![];
-        if !(bases.pylist_check()) { panic!("Type Error: pytype_ready") }
         for i in 0..(bases.pylist_size()) {
-            if let Some(mro) = bases.pylist_getitem(i).pytype_tp_mro() {
+            if let Some(mro) = bases.pylist_getitem(i).expect("Never fails").pytype_tp_mro() {
                 mro_list.push(mro.pylist_clone());
             }
         }
@@ -482,25 +488,25 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
 
     if let Some(ref dictobj) = obj.pytype_tp_dict() {
         let mut typ = obj.pytype_typeobj_borrow_mut();
-        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__") {
+        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__bool__")? {
             typ.tp_bool = Some(fun);
         }
-        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__add__") {
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__add__")? {
             typ.tp_fun_add = Some(fun);
         }
-        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__eq__") {
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__eq__")? {
             typ.tp_fun_eq = Some(fun);
         }
-        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__lt__") {
+        if let Some(fun) = get_wrapped_binop(Rc::clone(&dictobj), "__lt__")? {
             typ.tp_fun_lt = Some(fun);
         }
-        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__") {
+        if let Some(fun) = get_wrapped_unaryop(Rc::clone(&dictobj), "__len__")? {
             typ.tp_len = Some(fun);
         }
-        if let Some(fun) = get_wrapped_varargfun(Rc::clone(&dictobj), "__init__") {
+        if let Some(fun) = get_wrapped_varargfun(Rc::clone(&dictobj), "__init__")? {
             typ.tp_init = Some(fun);
         }
-        if let Some(fun) = get_wrapped_varargfun(Rc::clone(&dictobj), "__new__") {
+        if let Some(fun) = get_wrapped_varargfun(Rc::clone(&dictobj), "__new__")? {
             typ.tp_new = Some(fun);
         }
     }
@@ -525,6 +531,8 @@ pub fn pytype_ready(obj: Rc<PyObject>) {
         let mut typ = obj.pytype_typeobj_borrow_mut();
         typ.tp_setattro = Some(Rc::new(pyobj_generic_set_attro));
     }
+
+    Ok(())
 }
 
 thread_local! (
@@ -545,10 +553,10 @@ thread_local! (
     }
 );
 
-fn object_new(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
-    Rc::new(PyObject {
+fn object_new(typ: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>> {
+    Ok(Rc::new(PyObject {
         ob_type: Some(Rc::clone(&typ)),
         ob_dict: Some(PyObject::pydict_new()),
         inner: PyInnerObject::InstObj,
-    })
+    }))
 }

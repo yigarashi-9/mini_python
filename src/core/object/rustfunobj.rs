@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use eval::PyRes;
 use object::{PyObject, PyInnerObject};
 use object::typeobj::*;
 
@@ -12,7 +13,7 @@ pub struct PyRustFunObject {
 
 #[derive(Clone)]
 pub enum PyRustFun {
-    MethO(Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> Rc<PyObject>>),
+    MethO(Rc<dyn Fn(Rc<PyObject>, Rc<PyObject>) -> PyRes<Rc<PyObject>>>),
 }
 
 thread_local! (

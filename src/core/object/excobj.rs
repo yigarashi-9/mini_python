@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use eval::PyRes;
 use object::{PyObject, PyInnerObject};
 use object::generic::*;
 use object::typeobj::*;
@@ -61,6 +62,34 @@ thread_local! (
             inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(exctp))),
         })
     };
+
+    pub static PY_ATTRIBUTEERROR_TYPE: Rc<PyObject> = {
+        let exctp = PyTypeObject {
+            tp_name: "AttributeError".to_string(),
+            tp_base: PY_EXC_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            tp_hash: Some(Rc::new(default_hash)),
+            ..Default::default()
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            ob_dict: None,
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(exctp))),
+        })
+    };
+
+    pub static PY_INDEXERROR_TYPE: Rc<PyObject> = {
+        let exctp = PyTypeObject {
+            tp_name: "IndexError".to_string(),
+            tp_base: PY_EXC_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            tp_hash: Some(Rc::new(default_hash)),
+            ..Default::default()
+        };
+        Rc::new(PyObject {
+            ob_type: PY_TYPE_TYPE.with(|tp| { Some(Rc::clone(&tp)) }),
+            ob_dict: None,
+            inner: PyInnerObject::TypeObj(Rc::new(RefCell::new(exctp))),
+        })
+    };
 );
 
 impl PyObject {
@@ -77,10 +106,10 @@ pub struct PyExcObject {
     args: Rc<PyObject>,
 }
 
-fn pybaseexc_new(exception: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Rc<PyObject> {
-    Rc::new(PyObject {
+fn pybaseexc_new(exception: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>> {
+    Ok(Rc::new(PyObject {
         ob_type: Some(exception),
         ob_dict: None,
         inner: PyInnerObject::ExcObj(Rc::new(PyExcObject { args: PyObject::pylist_from_vec(args) })),
-    })
+    }))
 }

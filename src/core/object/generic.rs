@@ -1,47 +1,63 @@
 use std::rc::Rc;
 
-use eval::{eval};
+use error::*;
 use env::*;
+use eval::{PyRes, eval};
 use object::*;
 use object::boolobj::*;
+use object::excobj::*;
 use object::methodobj::*;
 use object::noneobj::*;
 use object::rustfunobj::*;
 use object::typeobj::*;
 
-pub fn pyobj_to_bool(v: Rc<PyObject>) -> bool {
+pub fn pyobj_to_bool(v: Rc<PyObject>) -> PyRes<bool> {
     let ob_type = v.ob_type();
     let typ = ob_type.pytype_typeobj_borrow();
     match typ.tp_bool.as_ref() {
         Some(ref fun) => {
-            let res = fun(Rc::clone(&v));
+            let res = fun(Rc::clone(&v))?;
 
             if PY_TRUE.with(|obj| { res == *obj }) {
-                true
+                Ok(true)
             } else if PY_FALSE.with(|obj| { res == *obj }) {
-                false
+                Ok(false)
             } else {
-                panic!("Type Error: pyobj_is_bool 1")
+                pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                 "boolean object expected");
+                Err(())
             }
         },
         None => match typ.tp_len.as_ref() {
-            Some(ref fun) => pyobj_to_i32(fun(Rc::clone(&v))) > 0,
-            None => panic!("Type Error: pyobj_is_bool 3")
+            Some(ref fun) => Ok(pyobj_to_i32(fun(Rc::clone(&v))?)? > 0),
+            None => {
+                pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                 "boolean object expected");
+                Err(())
+            }
         }
     }
 }
 
-pub fn pyobj_to_i32(v: Rc<PyObject>) -> i32 {
+pub fn pyobj_to_i32(v: Rc<PyObject>) -> PyRes<i32> {
     match v.inner {
-        PyInnerObject::LongObj(ref obj) => obj.n,
-        _ => panic!("Type Error: pyobj_to_i32"),
+        PyInnerObject::LongObj(ref obj) => Ok(obj.n),
+        _ => {
+            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                             "int object expected");
+            Err(())
+        }
     }
 }
 
-pub fn pyobj_to_string(v: Rc<PyObject>) -> String {
+pub fn pyobj_to_string(v: Rc<PyObject>) -> PyRes<String> {
     match v.inner {
-        PyInnerObject::StrObj(ref obj) => obj.s.clone(),
-        _ => panic!("Type Error: pyobj_to_string"),
+        PyInnerObject::StrObj(ref obj) => Ok(obj.s.clone()),
+        _ => {
+            pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                             "str object expected");
+            Err(())
+        }
     }
 }
 
@@ -51,7 +67,7 @@ pub fn pyobj_issubclass(v: Rc<PyObject>, typ: Rc<PyObject>) -> bool {
     match v.pytype_tp_mro() {
         Some(ref tp_mro) => {
             for i in 0..(tp_mro.pylist_size()) {
-                let base = tp_mro.pylist_getitem(i);
+                let base = tp_mro.pylist_getitem(i).unwrap();
                 if base == typ { return true; }
             };
             false
@@ -65,16 +81,16 @@ pub fn pyobj_isinstance(v: Rc<PyObject>, typ: Rc<PyObject>) -> bool {
     match v_type.pytype_tp_mro() {
         Some(ref tp_mro) => {
             for i in 0..(tp_mro.pylist_size()) {
-                let base = tp_mro.pylist_getitem(i);
+                let base = tp_mro.pylist_getitem(i).unwrap();
                 if base == typ { return true; }
             };
             false
         },
-        None => false
+        None => panic!("Implementation Error: pyobj_issubclass")
     }
 }
 
-pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Option<Rc<PyObject>> {
+pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> PyRes<Rc<PyObject>> {
     match funv.inner {
         PyInnerObject::FunObj(ref fun) => {
             eval(&fun.codeobj.pycode_code(),
@@ -91,14 +107,16 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Option<Rc<PyOb
             match obj.rust_fun {
                 PyRustFun::MethO(ref fun) => {
                     if args.len() != 1 {
-                        panic!("Type error: call_func RustFunObj METH_O");
+                        pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                         "1 argument expected");
+                        return Err(())
                     }
                     // Probably, slf cannot be None after module is implemented
                     let slf = match obj.ob_self {
                         Some(ref slf) => Rc::clone(slf),
                         None => PY_NONE_OBJECT.with(|ob| { Rc::clone(ob) })
                     };
-                    Some((*fun)(slf, Rc::clone(&args[0])))
+                    (*fun)(slf, Rc::clone(&args[0]))
                 }
             }
         },
@@ -106,8 +124,12 @@ pub fn call_func(funv: Rc<PyObject>, args: &Vec<Rc<PyObject>>) -> Option<Rc<PyOb
             let ob_type = funv.ob_type();
             let typ = ob_type.pytype_typeobj_borrow();
             match typ.tp_call {
-                Some(ref tp_call) => Some(tp_call(Rc::clone(&funv), args)),
-                None => panic!("Type Error: Callable expected"),
+                Some(ref tp_call) => tp_call(Rc::clone(&funv), args),
+                None => {
+                    pyerr_set_string(PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                                     "callable object expected");
+                    Err(())
+                }
             }
         }
     }
@@ -142,36 +164,64 @@ pub fn bind_self(value: &Rc<PyObject>, slf: Rc<PyObject>) -> Rc<PyObject> {
     }
 }
 
-pub fn pyobj_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+pub fn pyobj_get_attr(value: Rc<PyObject>, key: Rc<PyObject>) -> PyRes<Rc<PyObject>> {
     let ob_type = value.ob_type();
+    let mut res = None;
+
     if let Some(ref tp_getattro) = ob_type.pytype_typeobj_borrow().tp_getattro {
-        return tp_getattro(value, key)
+        res = tp_getattro(value, key)?;
     };
-    panic!("No tp_getattro");
+
+    match res {
+        Some(res) => Ok(res),
+        None => {
+            pyerr_set_string(
+                PY_ATTRIBUTEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "failed to find attribute");
+            Err(())
+        }
+    }
+
 }
 
-pub fn pyobj_generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> Option<Rc<PyObject>> {
+pub fn pyobj_generic_get_attro(value: Rc<PyObject>, key: Rc<PyObject>) -> PyRes<Option<Rc<PyObject>>> {
     let mut ret_val = None;
     if let Some(ref ob_dict) = value.ob_dict {
-        ret_val = ob_dict.pydict_lookup(Rc::clone(&key));
+        ret_val = ob_dict.pydict_lookup(Rc::clone(&key))?;
     };
 
     if ret_val.is_none() {
-        ret_val = type_getattro(value.ob_type(), Rc::clone(&key));
+        ret_val = type_getattro(value.ob_type(), Rc::clone(&key))?;
     };
 
     match ret_val {
-        Some(ref retval) => Some(bind_self(retval, Rc::clone(&value))),
-        None => None,
+        Some(ret_val) => Ok(Some(bind_self(&ret_val, Rc::clone(&value)))),
+        None => {
+            pyerr_set_string(
+                PY_ATTRIBUTEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "failed to find attribute");
+            Err(())
+        }
     }
 }
 
-pub fn pyobj_set_attro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
+pub fn pyobj_set_attr(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) -> PyRes<()> {
     let ob_type = value.ob_type();
     let typ = ob_type.pytype_typeobj_borrow();
-    typ.tp_setattro.as_ref().expect("No tp_setattro")(value, key, rvalue);
+    match typ.tp_setattro {
+        Some(ref tp_setattro) => tp_setattro(value, key, rvalue),
+        None => {
+            pyerr_set_string(
+                PY_TYPEERROR_TYPE.with(|tp| Rc::clone(tp)),
+                "__setattribute__ expected");
+            Err(())
+        }
+    }
 }
 
-pub fn pyobj_generic_set_attro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) {
-    value.ob_dict.as_ref().expect("No ob_dict").pydict_update(key, rvalue);
+pub fn pyobj_generic_set_attro(value: Rc<PyObject>, key: Rc<PyObject>, rvalue: Rc<PyObject>) -> PyRes<()> {
+    match value.ob_dict {
+        Some(ref ob_dict) => ob_dict.pydict_update(key, rvalue),
+        None => panic!("Implementation Error: pyobj_generic_set_attro")
+    }
 }
